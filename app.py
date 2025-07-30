@@ -103,6 +103,10 @@ characters = {
     1897: "Sora"
 }
 
+bannedregionplayersdict = {
+    "cordoba": [2045211, 3062615, 2110319, 863905, 3061033, 2788991, 3083847, 1975365, 3065743, 1039246]
+}
+
 ### Menu: Start from scratch or from database
 print("Made by Floripundo - Smash Bros Cordoba TO. Choose an option:")
 option = input("1 - Start from Scratch | 2 - Add tournaments | Or Write the region you want to run the algorithm for: ")
@@ -120,12 +124,12 @@ elif option == "2":
     for i in allplayers:
         # Load current ranking in players dict
         players[i[0]] = [(i[1] + "|" + i[0]), i[4], i[5], None] # MISSING N TOURNEYS
-elif option.lower() == "cordoba":
+else:
     executeQuery("""delete from attendees""")
     executeQuery("""delete from tournaments""")
     executeQuery("""delete from players""")
-    tournamentCSV = "cordoba"
-    bannedregionplayers = [2045211, 3062615, 2110319, 863905, 3061033, 2788991, 3083847, 1975365, 3065743, 1039246]
+    tournamentCSV = "Regions/" + option.lower()
+    bannedregionplayers = bannedregionplayersdict[option.lower()]
 
 
 ### Params

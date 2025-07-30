@@ -38,7 +38,7 @@ def updateElo(data, k, entrants, players, dqlist, bannedregionplayers):
         try:
             # If its region ranking algorithm, skip region banned players
             if entrants[winner][0] in bannedregionplayers or entrants[loser][0] in bannedregionplayers:
-                print(f"❕ Skipped ELO calculations for out of region user in: updateElo() | {players[entrants[winner][0]][0]} VS. {players[entrants[loser][0]][0]}")
+                #print(f"❕ Skipped ELO calculations for out of region user in: updateElo() | {players[entrants[winner][0]][0]} VS. {players[entrants[loser][0]][0]}")
                 # Count games to help next step
                 entrants[winner][1] += 1
                 entrants[loser][1] += 1
