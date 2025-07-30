@@ -104,6 +104,6 @@ def updatePlacement(placementdata, entrants, players, tournamentid, guests, last
         #print(f"{players[entrants[entrantid][0]][0]} | Points: {points} | Placement: {placement}")
 
         # Additionaly save the attendee ELO / PP variation in the database
-        executeQuery("""INSERT INTO attendees (playerid, tournamentid, points, elo, placement) VALUES (?, ?, ?, ?, ?)""", (entrants[entrantid][0], tournamentid, round(points, 3), players[entrants[entrantid][0]][1], placement))
+        executeQuery("""REPLACE INTO attendees (playerid, tournamentid, points, elo, placement) VALUES (?, ?, ?, ?, ?)""", (entrants[entrantid][0], tournamentid, round(points, 3), players[entrants[entrantid][0]][1], placement))
 
     return players

@@ -4,7 +4,7 @@
 
 eloweight = 0.6
 placementweight = 0.4
-ranking = {} # globalid: [name, sponsor, rank, elo, placementpoints, [wins, losses]] <-- ELO and PP not normalized
+ranking = {} # globalid: [name, sponsor, rank, elo, placementpoints, [wins, losses], {characters}] <-- ELO and PP not normalized
 
 tourneycount = {
     0: 0,
