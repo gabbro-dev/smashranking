@@ -49,7 +49,7 @@ def calculatePoints(placement, nplayers, avgelo, basesize=basesize, harshness=ha
     points = base * scale * (avgelo / 1500)
     return points
 
-def updatePlacement(placementdata, entrants, players, tournamentid, guests, lastelo):
+def updatePlacement(placementdata, entrants, players, tournamentid, guests, lastelo, option):
     # Initial count for number of present attendes and average elo
     nplayers = sumelo = 0
     # List of present attendees to not reward abscent ones
@@ -104,6 +104,10 @@ def updatePlacement(placementdata, entrants, players, tournamentid, guests, last
         #print(f"{players[entrants[entrantid][0]][0]} | Points: {points} | Placement: {placement}")
 
         # Additionaly save the attendee ELO / PP variation in the database
-        executeQuery("""REPLACE INTO attendees (playerid, tournamentid, points, elo, placement) VALUES (?, ?, ?, ?, ?)""", (entrants[entrantid][0], tournamentid, round(points, 3), players[entrants[entrantid][0]][1], placement))
+        if option == "1":
+            rankingid = "arg"
+        else:
+            rankingid = option.lower()
+        executeQuery("""REPLACE INTO attendees (playerid, tournamentid, points, elo, placement, rankingid) VALUES (?, ?, ?, ?, ?, ?)""", (entrants[entrantid][0], tournamentid, round(points, 3), players[entrants[entrantid][0]][1], placement, rankingid))
 
     return players

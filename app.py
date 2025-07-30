@@ -104,7 +104,7 @@ characters = {
 }
 
 bannedregionplayersdict = {
-    "cordoba": [2045211, 3062615, 2110319, 863905, 3061033, 2788991, 3083847, 1975365, 3065743, 1039246],
+    "cba": [2045211, 3062615, 2110319, 863905, 3061033, 2788991, 3083847, 1975365, 3065743, 1039246],
     "jujuy": [] # Testing
 }
 
@@ -114,16 +114,11 @@ option = input("1 - Start from Scratch | 2 - Add tournaments | Or Write the regi
 
 if option == "1":
     # Start from scratch
+    executeQuery("""delete from attendees where rankingid = 'arg'""")
     executeQuery("""delete from rankings where rankingid = 'arg'""")
     tournamentCSV = "tournaments2024"
-elif option == "2":
-    # Add tournaments
-    tournamentCSV = "addtournaments"
-    allplayers = executeQuery("""select * from players""")
-    for i in allplayers:
-        # Load current ranking in players dict
-        players[i[0]] = [(i[1] + "|" + i[0]), i[4], i[5], None] # MISSING N TOURNEYS
 else:
+    executeQuery("""delete from attendees where rankingid = ?""", (option.lower(),))
     executeQuery("""delete from rankings where rankingid = ?""", (option.lower(),))
     tournamentCSV = "Regions/" + option.lower()
     bannedregionplayers = bannedregionplayersdict[option.lower()]
@@ -360,7 +355,7 @@ for tourney in tournamentData:
     # Get placements and update Placement points
     placementdata = fetchData(queryPlacements, variables, headers, ["event", "entrants"])
     tournamentid = executeQuery("""select id from tournaments where name = ?""", (tourney[1],))[0][0]
-    players = updatePlacement(placementdata, entrants, players, tournamentid, guests, lastelo) # This function also updates the tournaments attendees for the database and their ELO / PP change per player
+    players = updatePlacement(placementdata, entrants, players, tournamentid, guests, lastelo, option) # This function also updates the tournaments attendees for the database and their ELO / PP change per player
 
     processCount += 1
 
@@ -391,7 +386,7 @@ if option == "1":
         print(f"{count} - {data[0]}: {data[2]} | {globalid}")
         # Save ranking into DB
         executeQuery("""insert into rankings (rankingid, playerid, rank, elo, pp, wins, losses, characters) values ('arg', ?, ?, ?, ?, ?, ?, ?)""", (globalid, data[2], data[3], data[4], data[5][0], data[5][1], json.dumps(data[6])))
-        executeQuery("""update players set sponsor = ? where id = ?""", (data[1], globalid))
+        executeQuery("""update players set name = ?, sponsor = ? where id = ?""", (data[0], data[1], globalid))
 # Region Ranking
 else:
     print(f"FINAL RANK {option.upper()}")
