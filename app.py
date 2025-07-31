@@ -102,21 +102,32 @@ characters = {
     1846: "Kazuya",
     1897: "Sora"
 }
-
 bannedregionplayersdict = {
     "cba": [2045211, 3062615, 2110319, 863905, 3061033, 2788991, 3083847, 1975365, 3065743, 1039246],
-    "jujuy": [] # Testing
+    "jujuy": [],
+    "santafe": [],
+    "bsas": [],
+    "salta": []
 }
 
 ### Menu: Start from scratch or from database
 print("Made by Floripundo. Choose an option:")
-option = input("1 - Start from Scratch | 2 - Add tournaments | Or Write the region you want to run the algorithm for: ")
+option = input("1 - Arg Ranking | 2 - Update Ranking (add tourneys) | Or Write the region you want to run the algorithm for: ")
+option2 = None
 
 if option == "1":
     # Start from scratch
     executeQuery("""delete from attendees where rankingid = 'arg'""")
     executeQuery("""delete from rankings where rankingid = 'arg'""")
     tournamentCSV = "tournaments2024"
+elif option == "2":
+    # Ask ranking to update
+    option2 = input("1 - Update Arg Ranking | Or write the region you want to update the ranking for: ")
+    if option2 == "1":
+        # Update Arg Ranking
+        data = executeQuery("""select p.name, r.playerid, r.elo, r.pp, r.wins, r.losses, r.characters, r.ntourneys from rankings r join players p on p.id = r.playerid where rankingid = 'arg'""")
+        for i in data:
+            print(i)
 else:
     executeQuery("""delete from attendees where rankingid = ?""", (option.lower(),))
     executeQuery("""delete from rankings where rankingid = ?""", (option.lower(),))
@@ -385,7 +396,7 @@ if option == "1":
         count += 1
         print(f"{count} - {data[0]}: {data[2]} | {globalid}")
         # Save ranking into DB
-        executeQuery("""insert into rankings (rankingid, playerid, rank, elo, pp, wins, losses, characters) values ('arg', ?, ?, ?, ?, ?, ?, ?)""", (globalid, data[2], data[3], data[4], data[5][0], data[5][1], json.dumps(data[6])))
+        executeQuery("""insert into rankings (rankingid, playerid, rank, elo, pp, wins, losses, characters, ntourneys) values ('arg', ?, ?, ?, ?, ?, ?, ?, ?)""", (globalid, data[2], data[3], data[4], data[5][0], data[5][1], json.dumps(data[6]), data[7]))
         executeQuery("""update players set name = ?, sponsor = ? where id = ?""", (data[0], data[1], globalid))
 # Region Ranking
 else:
@@ -397,5 +408,5 @@ else:
         count += 1
         print(f"{count} - {data[0]}: {data[2]}")
         # Save region ranking into DB
-        executeQuery("""insert into rankings (rankingid, playerid, rank, elo, pp, wins, losses, characters) values (?, ?, ?, ?, ?, ?, ?, ?)""", (option.lower(),globalid, data[2], data[3], data[4], data[5][0], data[5][1], json.dumps(data[6])))
+        executeQuery("""insert into rankings (rankingid, playerid, rank, elo, pp, wins, losses, characters, ntourneys) values (?, ?, ?, ?, ?, ?, ?, ?, ?)""", (option.lower(),globalid, data[2], data[3], data[4], data[5][0], data[5][1], json.dumps(data[6]), data[7]))
         executeQuery("""update players set name = ?, sponsor = ? where id = ?""", (data[0], data[1], globalid))

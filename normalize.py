@@ -4,7 +4,7 @@
 
 eloweight = 0.6
 placementweight = 0.4
-ranking = {} # globalid: [name, sponsor, rank, elo, placementpoints, [wins, losses], {characters}] <-- ELO and PP not normalized
+ranking = {} # globalid: [name, sponsor, rank, elo, placementpoints, [wins, losses], {characters}, ntourneys] <-- ELO and PP not normalized
 
 tourneycount = {
     0: 0,
@@ -43,7 +43,7 @@ def normalize(players, highestelo, lowestelo, highestplacement, lowestplacement)
 
         #print(f"DEBUG: Player: {data[0]} | Sponsor: {sponsor} - Name: {name}")
 
-        ranking[playerid] = [name, sponsor, rank, data[1], data[2], [data[5][0], data[5][1]], data[6]]
+        ranking[playerid] = [name, sponsor, rank, data[1], data[2], [data[5][0], data[5][1]], data[6], data[4]]
 
     ranking = sorted(ranking.items(), key=lambda x: x[1][2], reverse=True)
     return ranking
