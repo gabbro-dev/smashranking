@@ -1,3 +1,5 @@
+from player import Player
+
 ### Functions for calculating ELO
 
 def calculateElo(player, opponent, score, k):
@@ -5,7 +7,7 @@ def calculateElo(player, opponent, score, k):
     newelo = player + k * (score - expected)
     return round(newelo, 3)
 
-def updateElo(data, k, entrants, players, dqlist, bannedregionplayers):
+def updateElo(data, k, dqlist, bannedregionplayers):
     # Order data by timestamps. Ignore games that weren't marked as "Completed"
     data = sorted(
         [s for s in data if s.get("completedAt") is not None],
@@ -37,26 +39,25 @@ def updateElo(data, k, entrants, players, dqlist, bannedregionplayers):
         # Calculate ELO
         try:
             # If its region ranking algorithm, skip region banned players
-            if entrants[winner][0] in bannedregionplayers or entrants[loser][0] in bannedregionplayers:
+            if Player.entrants[winner][0].globalid in bannedregionplayers or Player.entrants[loser][0].globalid in bannedregionplayers:
                 #print(f"❕ Skipped ELO calculations for out of region user in: updateElo() | {players[entrants[winner][0]][0]} VS. {players[entrants[loser][0]][0]}")
-                # Count games to help next step
-                entrants[winner][1] += 1
-                entrants[loser][1] += 1
+                # Count games to determine DQ
+                Player.entrants[winner][1] += 1
+                Player.entrants[loser][1] += 1
                 continue
             
-            newWinnerelo = calculateElo(players[entrants[winner][0]][1], players[entrants[loser][0]][1], 1, k)
-            newLoserelo = calculateElo(players[entrants[loser][0]][1], players[entrants[winner][0]][1], 0, k)
+            newWinnerelo = calculateElo(Player.entrants[winner][0].elo, Player.entrants[loser][0].elo, 1, k)
+            newLoserelo = calculateElo(Player.entrants[loser][0].elo, Player.entrants[winner][0].elo, 0, k)
         except:
             # User is guest / doesnt exist
-            #print("❕ Skipped ELO calculations for non existent user in: updateElo()")
 
             winnerisguest = loserisguest = False
 
             # Create / Update temporary profiles for guests
-            if winner not in entrants:
+            if winner not in Player.entrants:
                 guests[winner] = 1500
                 winnerisguest = True
-            if loser not in entrants:
+            if loser not in Player.entrants:
                 guests[loser] = 1500
                 loserisguest = True
 
@@ -69,35 +70,34 @@ def updateElo(data, k, entrants, players, dqlist, bannedregionplayers):
                 guests[loser] = newLoserelo
             # Winner is guest
             elif winnerisguest and loserisguest == False:
-                newWinnerelo = calculateElo(guests[winner], players[entrants[loser][0]][1], 1, k)
-                newLoserelo = calculateElo(players[entrants[loser][0]][1], guests[winner], 1, k)
+                newWinnerelo = calculateElo(guests[winner], Player.entrants[loser][0].elo, 1, k)
+                newLoserelo = calculateElo(Player.entrants[loser][0].elo, guests[winner], 1, k)
 
                 guests[winner] = newWinnerelo
-                players[entrants[loser][0]][1] = newLoserelo
-                players[entrants[loser][0]][5][1] += 1 # Update loss
+                Player.entrants[loser][0].elo = newLoserelo
+                Player.entrants[loser][0].losses += 1
             # Loser is guest
             elif winnerisguest == False and loserisguest:
-                newWinnerelo = calculateElo(players[entrants[winner][0]][1], guests[loser], 1, k)
-                newLoserelo = calculateElo(guests[loser], players[entrants[winner][0]][1], 1, k)
+                newWinnerelo = calculateElo(Player.entrants[winner][0].elo, guests[loser], 1, k)
+                newLoserelo = calculateElo(guests[loser], Player.entrants[winner][0].elo, 1, k)
 
                 guests[loser] = newLoserelo
-                players[entrants[winner][0]][1] = newWinnerelo
-                players[entrants[winner][0]][5][0] += 1 # Update win
-
+                Player.entrants[winner][0].elo = newWinnerelo
+                Player.entrants[winner][0].wins += 1
             continue
 
         # Update new ELO
-        players[entrants[winner][0]][1] = newWinnerelo
-        players[entrants[loser][0]][1] = newLoserelo
+        Player.entrants[winner][0].elo = newWinnerelo
+        Player.entrants[loser][0].elo = newLoserelo
 
         # Update win / loss
-        players[entrants[winner][0]][5][0] += 1
-        players[entrants[loser][0]][5][1] += 1
+        Player.entrants[winner][0].wins += 1
+        Player.entrants[loser][0].losses += 1
 
         # Count games to help next step
-        entrants[winner][1] += 1
-        entrants[loser][1] += 1
+        Player.entrants[winner][1] += 1
+        Player.entrants[loser][1] += 1
 
     if dqs > 0:
         print(f"⭕ Games skipped due DQ: {dqs}")
-    return players, entrants, guests # <--- Guests included to add to n-players
+    return guests # <--- Guests included to add to n-players

@@ -6,11 +6,10 @@ from elo import updateElo
 from placement import updatePlacement
 from normalize import normalize
 from db import executeQuery
+from player import Player
 
 ### Vars
 
-entrants = {} # entrantid : [globalid, elo] - Per tourney
-players = {} # globalid: [name, elo, top, survey, ntourneys, [wins, loss], {character: n usages}] - Global
 bannedplayers = [341901, 1227278, 135383, 635540, 1451270, 298485, 433945, 2709007, 2522784, 437848, 780143, 2501934, 510667, 1683659] # Not Argentinians
 bannedregionplayers = [] # For region rankings
 characters = {
@@ -175,9 +174,8 @@ def fetchData(query, variables, headers, path):
         
 # First step for the algorithm. Update players and map them to their globalID
 def mapPlayers(data):
-    global players, entrants
     # Reset entrants
-    entrants = {}
+    Player.resetEntrants()
 
     for i in data:
         # Update global player list
@@ -193,52 +191,52 @@ def mapPlayers(data):
 
             continue
 
-        if globalid not in players:
+        if globalid not in Player.players:
             # Manual pre-ELO for non Argentinians players
             if globalid in bannedplayers:
                 # Peco, Garu - 1600 ELO
                 if globalid == 135383 or globalid == 1451270:
-                    players[globalid] = [i["name"], 1600, 0, None, 0, [0, 0], {}]
-                    executeQuery("""insert ignore into players (id, name) values (?, ?)""", (globalid, i["name"])) # Preventing tracebacks with other insertions mid-algorithm
+                    Player(globalid, i["name"], 1600, 0)
+                    executeQuery("""insert ignore into players (id, name) values (?, ?)""", (globalid, i["name"]))
                 # Flame, Gonzalo Tapia - 1560 ELO
                 elif globalid == 780143 or globalid == 298485:
-                    players[globalid] = [i["name"], 1560, 0, None, 0, [0, 0], {}]
-                    executeQuery("""insert ignore into players (id, name) values (?, ?)""", (globalid, i["name"])) # Preventing tracebacks with other insertions mid-algorithm
+                    Player(globalid, i["name"], 1560, 0)
+                    executeQuery("""insert ignore into players (id, name) values (?, ?)""", (globalid, i["name"]))
                 # Benny Henny, LRBA->START - 1540 ELO
                 elif globalid == 433945 or globalid == 635540:
-                    players[globalid] = [i["name"], 1540, 0, None, 0, [0, 0], {}]
-                    executeQuery("""insert ignore into players (id, name) values (?, ?)""", (globalid, i["name"])) # Preventing tracebacks with other insertions mid-algorithm
+                    Player(globalid, i["name"], 1540, 0)
+                    executeQuery("""insert ignore into players (id, name) values (?, ?)""", (globalid, i["name"]))
                 else:
-                    players[globalid] = [i["name"], defaultelo, 0, None, 0, [0, 0], {}]
-                    executeQuery("""insert ignore into players (id, name) values (?, ?)""", (globalid, i["name"])) # Preventing tracebacks with other insertions mid-algorithm
+                    Player(globalid, i["name"], defaultelo, 0)
+                    executeQuery("""insert ignore into players (id, name) values (?, ?)""", (globalid, i["name"]))
             else:
-                players[globalid] = [i["name"], defaultelo, 0, None, 0, [0, 0], {}]
-                executeQuery("""insert ignore into players (id, name) values (?, ?)""", (globalid, i["name"])) # Preventing tracebacks with other insertions mid-algorithm
+                Player(globalid, i["name"], defaultelo, 0)
+                executeQuery("""insert ignore into players (id, name) values (?, ?)""", (globalid, i["name"]))
         else:
-            players[globalid][0] = i["name"]
+            Player.getPlayer(globalid).name = i["name"]
 
         # Update tourney player list
         entrantid = i["id"]
 
-        if entrantid not in entrants:
-            entrants[entrantid] = [globalid, 0]
+        if entrantid not in Player.entrants:
+            Player.entrants[entrantid] = [Player.getPlayer(globalid), 0] # 0 is to count games played to determine present or nonpresent attendee
 
 # Get character usage per player
 def mapCharacters(data):
-    global players, entrants
     for i in data:
         try:
             for j in i["games"]:
                 for k in j["selections"]:
                     if k["selectionType"] != "CHARACTER":
                         continue
-                    if characters[k["selectionValue"]] not in players[entrants[k["entrant"]["id"]][0]][6]:
-                        players[entrants[k["entrant"]["id"]][0]][6][characters[k["selectionValue"]]] = 1
+                    if characters[k["selectionValue"]] not in Player.entrants[k["entrant"]["id"]][0].characters:
+                        Player.entrants[k["entrant"]["id"]][0].characters[k["selectionValue"]] = 1
+                        #players[entrants[k["entrant"]["id"]][0]][6][characters[k["selectionValue"]]] = 1
                     else:
-                        players[entrants[k["entrant"]["id"]][0]][6][characters[k["selectionValue"]]] += 1
+                        Player.entrants[k["entrant"]["id"]][0].characters[k["selectionValue"]] += 1
+                        #players[entrants[k["entrant"]["id"]][0]][6][characters[k["selectionValue"]]] += 1
         except: # Games not reported
             continue
-# Honestly i won't even explain this function, it just works. I know it's a mess you figure it out
 
 ### Querys for Start.gg API's
 
@@ -356,57 +354,84 @@ for tourney in tournamentData:
     mapCharacters(setsdata)
     # Save ELO before tournament for avg elo in updatePlacement()
     lastelo = {}
-    for i, j in players.items():
-        lastelo[i] = j[1]
+    for globalid, player in Player.players.items():
+        lastelo[globalid] = player.elo
 
     # Set up DQ list
     dqlist = tourney[3].split("|")
-    players, entrants, guests = updateElo(setsdata, k, entrants, players, dqlist, bannedregionplayers) # This function also counts the games for each player to help for next step
+    guests = updateElo(setsdata, k, dqlist, bannedregionplayers) # This function also counts the games for each player to help for next step
 
     # Get placements and update Placement points
     placementdata = fetchData(queryPlacements, variables, headers, ["event", "entrants"])
     tournamentid = executeQuery("""select id from tournaments where name = ?""", (tourney[1],))[0][0]
-    players = updatePlacement(placementdata, entrants, players, tournamentid, guests, lastelo, option) # This function also updates the tournaments attendees for the database and their ELO / PP change per player
+    updatePlacement(placementdata, tournamentid, guests, lastelo, option) # This function also updates the tournaments attendees for the database and their ELO / PP change per player
 
     processCount += 1
 
 # All params and scores calculated. Normalize data
 
-sortedelo = sorted(players.items(), key=lambda x: x[1][1], reverse=True)
+sortedelo = sorted(Player.players.items(), key=lambda x: x[1].elo, reverse=True)
 
-highestelo = sortedelo[0][1][1]
-lowestelo = sortedelo[-1][1][1]
+highestelo = sortedelo[0][1].elo
+lowestelo = sortedelo[-1][1].elo
 
-sortedplacement = sorted(players.items(), key=lambda x: x[1][2], reverse=True)
+sortedplacement = sorted(Player.players.items(), key=lambda x: x[1].pp, reverse=True)
 
-highestplacement = sortedplacement[0][1][2]
-lowestplacement = sortedplacement[-1][1][2]
+highestplacement = sortedplacement[0][1].pp
+lowestplacement = sortedplacement[-1][1].pp
 
 # globalid: [name, sponsor, rank, elo, placementpoints, [wins, losses], {characters}] <-- ELO and PP not normalized
-ranking = normalize(players, highestelo, lowestelo, highestplacement, lowestplacement) 
+ranking = normalize(highestelo, lowestelo, highestplacement, lowestplacement) 
 
 count = 0
 # Argentina Ranking
 if option == "1":
     print("FINAL RANK ARGENTINA 2024")
-    for globalid, data in ranking:
-        if globalid in bannedplayers:
-            #print(f"❌ BANNED PLAYER: {data[0]} | {globalid}")
-            continue
-        count += 1
-        print(f"{count} - {data[0]}: {data[2]} | {globalid}")
-        # Save ranking into DB
-        executeQuery("""insert into rankings (rankingid, playerid, rank, elo, pp, wins, losses, characters, ntourneys) values ('arg', ?, ?, ?, ?, ?, ?, ?, ?)""", (globalid, data[2], data[3], data[4], data[5][0], data[5][1], json.dumps(data[6]), data[7]))
-        executeQuery("""update players set name = ?, sponsor = ? where id = ?""", (data[0], data[1], globalid))
+    for playerid, (player, rank) in ranking:
+      if player.globalid in bannedplayers:
+          print(f"❌ BANNED PLAYER: {player.name} | {player.globalid}")
+          continue
+
+      count += 1
+      print(f"{count} - {player.name}: {rank} | {player.globalid}")
+
+      # Save ranking into DB
+      executeQuery("""
+          insert into rankings (rankingid, playerid, rank, elo, pp, wins, losses, characters, ntourneys)
+          values ('arg', ?, ?, ?, ?, ?, ?, ?, ?)
+      """, (
+          player.globalid,
+          rank,
+          player.elo,
+          player.pp,
+          player.wins,
+          player.losses,
+          json.dumps(player.characters),
+          player.ntourneys
+      ))
+
+      executeQuery("""
+          update players set name = ?, sponsor = ? where id = ?
+      """, (
+          player.name,
+          player.sponsor,
+          player.globalid
+      ))
 # Region Ranking
 else:
     print(f"FINAL RANK {option.upper()}")
-    for globalid, data in ranking:
-        if globalid in bannedregionplayers:
-            #print(f"❌ BANNED PLAYER: {data[0]} | {globalid}")
+    for playerid, (player, rank) in ranking:
+        if player.globalid in bannedregionplayers:
             continue
         count += 1
-        print(f"{count} - {data[0]}: {data[2]}")
-        # Save region ranking into DB
-        executeQuery("""insert into rankings (rankingid, playerid, rank, elo, pp, wins, losses, characters, ntourneys) values (?, ?, ?, ?, ?, ?, ?, ?, ?)""", (option.lower(),globalid, data[2], data[3], data[4], data[5][0], data[5][1], json.dumps(data[6]), data[7]))
-        executeQuery("""update players set name = ?, sponsor = ? where id = ?""", (data[0], data[1], globalid))
+        print(f"{count} - {player.name}: {rank} | ELO: {player.elo} - PP: {player.pp}")
+        executeQuery(
+            """insert into rankings (rankingid, playerid, rank, elo, pp, wins, losses, characters, ntourneys)
+              values (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (option.lower(), player.globalid, rank, player.elo, player.pp,
+            player.wins, player.losses, json.dumps(player.characters), player.ntourneys)
+        )
+        executeQuery(
+            """update players set name = ?, sponsor = ? where id = ?""",
+            (player.name, player.sponsor, player.globalid)
+        )

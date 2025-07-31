@@ -1,6 +1,7 @@
 import math
 #
 from db import executeQuery
+from player import Player
 
 ### Functions for calculating placement
 
@@ -49,7 +50,7 @@ def calculatePoints(placement, nplayers, avgelo, basesize=basesize, harshness=ha
     points = base * scale * (avgelo / 1500)
     return points
 
-def updatePlacement(placementdata, entrants, players, tournamentid, guests, lastelo, option):
+def updatePlacement(placementdata, tournamentid, guests, lastelo, option):
     # Initial count for number of present attendes and average elo
     nplayers = sumelo = 0
     # List of present attendees to not reward abscent ones
@@ -57,7 +58,7 @@ def updatePlacement(placementdata, entrants, players, tournamentid, guests, last
     for i in placementdata:
         entrantid = i["id"]
         try:
-            if entrants[entrantid][1] < 1:
+            if Player.entrants[entrantid][1] < 1:
                 continue
         except:
             # User is guest / doesnt exist
@@ -66,7 +67,7 @@ def updatePlacement(placementdata, entrants, players, tournamentid, guests, last
         #print(f"Player: {players[entrants[entrantid][0]][0]} | ELO: {players[entrants[entrantid][0]][1]}")
         nplayers += 1
         presentattendees.append(entrantid)
-        sumelo += lastelo[entrants[entrantid][0]]
+        sumelo += lastelo[Player.entrants[entrantid][0].globalid]
         #print(f"Elo for {players[entrants[entrantid][0]][0]}: {lastelo[entrants[entrantid][0]]}")
     nplayers += len(guests) # To count for guests
 
@@ -90,7 +91,7 @@ def updatePlacement(placementdata, entrants, players, tournamentid, guests, last
             if entrantid not in presentattendees:
                 #print("SKIPPED NON PRESENT ATTENDEE:", players[entrants[entrantid][0]][0])
                 continue
-            if entrants[entrantid][1] < 1:
+            if Player.entrants[entrantid][1] < 1:
                 continue
         except:
             # User is guest / doesnt exist
@@ -99,8 +100,9 @@ def updatePlacement(placementdata, entrants, players, tournamentid, guests, last
 
         # Update points and ntourneys
         points = calculatePoints(placement, nplayers, avgelo)
-        players[entrants[entrantid][0]][2] += points
-        players[entrants[entrantid][0]][4] += 1
+        Player.entrants[entrantid][0].pp += points
+        Player.entrants[entrantid][0].ntourneys += 1
+
         #print(f"{players[entrants[entrantid][0]][0]} | Points: {points} | Placement: {placement}")
 
         # Additionaly save the attendee ELO / PP variation in the database
@@ -108,6 +110,4 @@ def updatePlacement(placementdata, entrants, players, tournamentid, guests, last
             rankingid = "arg"
         else:
             rankingid = option.lower()
-        executeQuery("""REPLACE INTO attendees (playerid, tournamentid, points, elo, placement, rankingid) VALUES (?, ?, ?, ?, ?, ?)""", (entrants[entrantid][0], tournamentid, round(points, 3), players[entrants[entrantid][0]][1], placement, rankingid))
-
-    return players
+        executeQuery("""REPLACE INTO attendees (playerid, tournamentid, points, elo, placement, rankingid) VALUES (?, ?, ?, ?, ?, ?)""", (Player.entrants[entrantid][0].globalid, tournamentid, round(points, 3), Player.entrants[entrantid][0].elo, placement, rankingid))
