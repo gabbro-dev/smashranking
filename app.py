@@ -1,4 +1,4 @@
-import requests, os, csv, time, json
+import requests, os, csv, time, json, ast
 from datetime import datetime
 from dotenv import load_dotenv
 #
@@ -110,7 +110,7 @@ bannedregionplayersdict = {
 }
 
 ### Menu: Start from scratch or from database
-print("Made by Floripundo. Choose an option:")
+print("Made by Floripundo, Neiel was not here neither was Wadi. Choose an option:")
 option = input("1 - Arg Ranking | 2 - Update Ranking (add tourneys) | Or Write the region you want to run the algorithm for: ")
 option2 = None
 
@@ -124,9 +124,21 @@ elif option == "2":
     option2 = input("1 - Update Arg Ranking | Or write the region you want to update the ranking for: ")
     if option2 == "1":
         # Update Arg Ranking
-        data = executeQuery("""select p.name, r.playerid, r.elo, r.pp, r.wins, r.losses, r.characters, r.ntourneys from rankings r join players p on p.id = r.playerid where rankingid = 'arg'""")
+        data = executeQuery("""select p.name, p.sponsor, r.playerid, r.elo, r.pp, r.wins, r.losses, r.characters, r.ntourneys from rankings r join players p on p.id = r.playerid where rankingid = 'arg'""")
         for i in data:
-            print(i)
+            Player(i[2], i[0], float(i[3]), float(i[4]), i[1], i[8], i[5], i[6], ast.literal_eval(i[7]))
+
+        tournamentCSV = "Update/arg"
+    else:
+        # Update region ranking
+        data = executeQuery("""select p.name, p.sponsor, r.playerid, r.elo, r.pp, r.wins, r.losses, r.characters, r.ntourneys from rankings r join players p on p.id = r.playerid where rankingid = ?""", (option2.lower(),))
+        for i in data:
+            Player(i[2], i[0], float(i[3]), float(i[4]), i[1], i[8], i[5], i[6], ast.literal_eval(i[7]))
+            print(i[2], i[0], float(i[3]), float(i[4]), i[1], i[8], i[5], i[6])
+
+        tournamentCSV = "Update/" + option2.lower()
+        bannedregionplayers = bannedregionplayersdict[option2.lower()]
+
 else:
     executeQuery("""delete from attendees where rankingid = ?""", (option.lower(),))
     executeQuery("""delete from rankings where rankingid = ?""", (option.lower(),))
@@ -141,7 +153,7 @@ defaultelo = 1500 # Everyone starts at this ELO
 k = 8 # High -> More data | Low -> Less data
 
 ### Functions
-
+# maxi
 # Calls to Start.gg API
 def fetchData(query, variables, headers, path):
     alldata = []
@@ -426,7 +438,7 @@ else:
         count += 1
         print(f"{count} - {player.name}: {rank} | ELO: {player.elo} - PP: {player.pp}")
         executeQuery(
-            """insert into rankings (rankingid, playerid, rank, elo, pp, wins, losses, characters, ntourneys)
+            """insert ignore into rankings (rankingid, playerid, rank, elo, pp, wins, losses, characters, ntourneys)
               values (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (option.lower(), player.globalid, rank, player.elo, player.pp,
             player.wins, player.losses, json.dumps(player.characters), player.ntourneys)
