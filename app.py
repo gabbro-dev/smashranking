@@ -131,10 +131,14 @@ elif option == "2":
         tournamentCSV = "Update/arg"
     else:
         # Update region ranking
-        data = executeQuery("""select p.name, p.sponsor, r.playerid, r.elo, r.pp, r.wins, r.losses, r.characters, r.ntourneys from rankings r join players p on p.id = r.playerid where rankingid = ?""", (option2.lower(),))
+        data = executeQuery("""select p.name, p.sponsor, r.playerid, r.elo, r.pp, r.wins, r.losses, r.characters, r.ntourneys from rankings r join players p on p.id = r.playerid where rankingid = ? order by rank desc""", (option2.lower(),))
+        count = 0 # For calculating variation in ranking
+        lastranking = {}
         for i in data:
+            count += 1
             Player(i[2], i[0], float(i[3]), float(i[4]), i[1], i[8], i[5], i[6], ast.literal_eval(i[7]))
             print(i[2], i[0], float(i[3]), float(i[4]), i[1], i[8], i[5], i[6])
+            lastranking[i[2]] = count
 
         tournamentCSV = "Update/" + option2.lower()
         bannedregionplayers = bannedregionplayersdict[option2.lower()]
@@ -431,19 +435,47 @@ if option == "1":
       ))
 # Region Ranking
 else:
+    if option != "2":
+        rankingid = option
+    else:
+        rankingid = option2
     print(f"FINAL RANK {option.upper()}")
+    newranking = {}
     for playerid, (player, rank) in ranking:
         if player.globalid in bannedregionplayers:
             continue
         count += 1
         print(f"{count} - {player.name}: {rank} | ELO: {player.elo} - PP: {player.pp}")
-        executeQuery(
-            """insert ignore into rankings (rankingid, playerid, rank, elo, pp, wins, losses, characters, ntourneys)
-              values (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (option.lower(), player.globalid, rank, player.elo, player.pp,
-            player.wins, player.losses, json.dumps(player.characters), player.ntourneys)
-        )
-        executeQuery(
-            """update players set name = ?, sponsor = ? where id = ?""",
-            (player.name, player.sponsor, player.globalid)
-        )
+        newranking[player.globalid] = count
+        executeQuery("""
+                  replace into rankings (rankingid, playerid, rank, elo, pp, wins, losses, characters, ntourneys)
+                  values (?, ?, ?, ?, ?, ?, ?, ?, ?)
+              """, (
+                  rankingid,
+                  player.globalid,
+                  rank,
+                  player.elo,
+                  player.pp,
+                  player.wins,
+                  player.losses,
+                  json.dumps(player.characters),
+                  player.ntourneys
+              ))
+
+        executeQuery("""
+            update players set name = ?, sponsor = ? where id = ?
+        """, (
+            player.name,
+            player.sponsor,
+            player.globalid
+        ))
+# Calculate variations
+if option == "2":
+    for globalid, newTop in newranking.items():
+        lastTop = lastranking.get(globalid, None)
+        if lastTop != None:
+            variation = lastTop - newTop
+            print(Player.getPlayer(globalid).name, variation)
+        else:
+            variation = 0
+        executeQuery("""update rankings set variation = ? where playerid = ? and rankingid = ?""", (variation, globalid, option2))
