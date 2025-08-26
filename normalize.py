@@ -43,7 +43,7 @@ def normalize(highestelo, lowestelo, highestplacement, lowestplacement):
             sponsor = sponsor[:-1].strip()
             name = playertag[-1].strip()
 
-        #print(f"DEBUG: Player: {data[0]} | Sponsor: {sponsor} - Name: {name}")
+        print(f"DEBUG: Player: {globalid} | Sponsor: {sponsor} - Name: {name}")
         player.name = name
         player.sponsor = sponsor
 

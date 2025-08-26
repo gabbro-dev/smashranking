@@ -50,6 +50,7 @@ def updateElo(data, k, dqlist, bannedregionplayers):
             newLoserelo = calculateElo(Player.entrants[loser][0].elo, Player.entrants[winner][0].elo, 0, k)
         except:
             # User is guest / doesnt exist
+            print("❕ User is guest / doesnt existe in updateElo()")
 
             winnerisguest = loserisguest = False
 
@@ -71,7 +72,7 @@ def updateElo(data, k, dqlist, bannedregionplayers):
             # Winner is guest
             elif winnerisguest and loserisguest == False:
                 newWinnerelo = calculateElo(guests[winner], Player.entrants[loser][0].elo, 1, k)
-                newLoserelo = calculateElo(Player.entrants[loser][0].elo, guests[winner], 1, k)
+                newLoserelo = calculateElo(Player.entrants[loser][0].elo, guests[winner], 0, k)
 
                 guests[winner] = newWinnerelo
                 Player.entrants[loser][0].elo = newLoserelo
@@ -79,7 +80,7 @@ def updateElo(data, k, dqlist, bannedregionplayers):
             # Loser is guest
             elif winnerisguest == False and loserisguest:
                 newWinnerelo = calculateElo(Player.entrants[winner][0].elo, guests[loser], 1, k)
-                newLoserelo = calculateElo(guests[loser], Player.entrants[winner][0].elo, 1, k)
+                newLoserelo = calculateElo(guests[loser], Player.entrants[winner][0].elo, 0, k)
 
                 guests[loser] = newLoserelo
                 Player.entrants[winner][0].elo = newWinnerelo

@@ -246,10 +246,10 @@ def mapCharacters(data):
                     if k["selectionType"] != "CHARACTER":
                         continue
                     if characters[k["selectionValue"]] not in Player.entrants[k["entrant"]["id"]][0].characters:
-                        Player.entrants[k["entrant"]["id"]][0].characters[k["selectionValue"]] = 1
+                        Player.entrants[k["entrant"]["id"]][0].characters[characters[k["selectionValue"]]] = 1
                         #players[entrants[k["entrant"]["id"]][0]][6][characters[k["selectionValue"]]] = 1
                     else:
-                        Player.entrants[k["entrant"]["id"]][0].characters[k["selectionValue"]] += 1
+                        Player.entrants[k["entrant"]["id"]][0].characters[characters[k["selectionValue"]]] += 1
                         #players[entrants[k["entrant"]["id"]][0]][6][characters[k["selectionValue"]]] += 1
         except: # Games not reported
             continue
@@ -358,7 +358,7 @@ for tourney in tournamentData:
     print(f"✅ Processing tournament: {tourney[1]} | Progress: {(processCount * 100) // tournamentCount}%")
     # Save tournament in database
     date = datetime.strptime(tourney[5], "%d/%m/%Y").date()
-    startgg = "www.start.gg/" + tourney[0]
+    startgg = "https://start.gg/" + tourney[0]
     executeQuery("""insert ignore into tournaments (name, date, region, startgg, format, attendees) values (?, ?, ?, ?, ?, ?)""", (tourney[1], date, tourney[4], startgg, tourney[2], 0))
 
     # Get all tournament attendees and update global list
@@ -380,7 +380,7 @@ for tourney in tournamentData:
     # Get placements and update Placement points
     placementdata = fetchData(queryPlacements, variables, headers, ["event", "entrants"])
     tournamentid = executeQuery("""select id from tournaments where name = ?""", (tourney[1],))[0][0]
-    updatePlacement(placementdata, tournamentid, guests, lastelo, option) # This function also updates the tournaments attendees for the database and their ELO / PP change per player
+    updatePlacement(placementdata, tournamentid, guests, lastelo, option, option2) # This function also updates the tournaments attendees for the database and their ELO / PP change per player
 
     processCount += 1
 
@@ -404,35 +404,40 @@ count = 0
 if option == "1":
     print("FINAL RANK ARGENTINA 2024")
     for playerid, (player, rank) in ranking:
-      if player.globalid in bannedplayers:
-          print(f"❌ BANNED PLAYER: {player.name} | {player.globalid}")
-          continue
+        if player.globalid in bannedplayers:
+            print(f"❌ BANNED PLAYER: {player.name} | {player.globalid}")
+            continue
 
-      count += 1
-      print(f"{count} - {player.name}: {rank} | {player.globalid}")
+        count += 1
+        print(f"{count} - {player.name}: {rank} | {player.globalid}")     
+        # Save ranking into DB
+        executeQuery("""
+            insert into rankings (rankingid, playerid, rank, elo, pp, wins, losses, characters, ntourneys)
+            values ('arg', ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            player.globalid,
+            rank,
+            player.elo,
+            player.pp,
+            player.wins,
+            player.losses,
+            json.dumps(player.characters),
+            player.ntourneys
+        ))
 
-      # Save ranking into DB
-      executeQuery("""
-          insert into rankings (rankingid, playerid, rank, elo, pp, wins, losses, characters, ntourneys)
-          values ('arg', ?, ?, ?, ?, ?, ?, ?, ?)
-      """, (
-          player.globalid,
-          rank,
-          player.elo,
-          player.pp,
-          player.wins,
-          player.losses,
-          json.dumps(player.characters),
-          player.ntourneys
-      ))
+        executeQuery("""
+            update players set name = ?, sponsor = ? where id = ?
+        """, (
+            player.name,
+            player.sponsor,
+            player.globalid
+        ))
 
-      executeQuery("""
-          update players set name = ?, sponsor = ? where id = ?
-      """, (
-          player.name,
-          player.sponsor,
-          player.globalid
-      ))
+        executeQuery("""
+            update rankingdata set tournamentcount = ? where id = 'arg
+        """, (
+            tournamentCount,
+        ))
 # Region Ranking
 else:
     if option != "2":
@@ -446,6 +451,7 @@ else:
             continue
         count += 1
         print(f"{count} - {player.name}: {rank} | ELO: {player.elo} - PP: {player.pp}")
+        print(player.name, player.characters)   
         newranking[player.globalid] = count
         executeQuery("""
                   replace into rankings (rankingid, playerid, rank, elo, pp, wins, losses, characters, ntourneys)
@@ -469,6 +475,10 @@ else:
             player.sponsor,
             player.globalid
         ))
+
+        lastTournamentCount = executeQuery("""select tournamentcount from rankingdata where id = ?""", (rankingid,))[0][0]
+        newTournamentCount = lastTournamentCount + tournamentCount
+        executeQuery("""update rankingdata set tournamentcount = ? where id = ?""", (newTournamentCount, rankingid))
 # Calculate variations
 if option == "2":
     for globalid, newTop in newranking.items():
