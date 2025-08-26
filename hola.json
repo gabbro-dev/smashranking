@@ -1,8 +1,0 @@
-{
-    "id": 89732893,
-     "completedAt": 1748661344,
-      "winnerId": 20208404,
-       "slots": [
-        {"entrant": {"id": 20208404}},
-         {"entrant": {"id": 20233902}}],
-          "games": [{"id": 30343718, "selections": [{"selectionType": "CHARACTER", "selectionValue": 1777, "entrant": {"id": 20208404}}, {"selectionType": "CHARACTER", "selectionValue": 1328, "entrant": {"id": 20233902}}]}, {"id": 30343719, "selections": [{"selectionType": "CHARACTER", "selectionValue": 1777, "entrant": {"id": 20208404}}, {"selectionType": "CHARACTER", "selectionValue": 1319, "entrant": {"id": 20233902}}]}, {"id": 30343720, "selections": [{"selectionType": "CHARACTER", "selectionValue": 1777, "entrant": {"id": 20208404}}, {"selectionType": "CHARACTER", "selectionValue": 1319, "entrant": {"id": 20233902}}]}]}
