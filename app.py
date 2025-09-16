@@ -1,6 +1,7 @@
 import requests, os, csv, time, json, ast
 from datetime import datetime
 from dotenv import load_dotenv
+from bisect import bisect_right
 #
 from elo import updateElo
 from placement import updatePlacement
@@ -102,6 +103,7 @@ characters = {
     1897: "Sora"
 }
 bannedregionplayersdict = {
+    "test": [],
     "cba": [2045211, 3062615, 2110319, 863905, 3061033, 2788991, 3083847, 1975365, 3065743, 1039246, 2883101, 2618737],
     "jujuy": [],
     "santafe": [],
@@ -158,6 +160,30 @@ k = 8 # High -> More data | Low -> Less data
 
 ### Functions
 # maxi
+# Calculate win chance
+def winProb(winnerelo, loserelo) -> float | None:
+    if winnerelo is None or loserelo is None:
+        return None
+    return 1.0 / (1.0 + 10 ** ((loserelo - winnerelo) / 400.0))
+
+# Calculate if ELO in top 20% pool
+def eloPercentile(elovalue, elosorted: list[float] | None = None) -> float | None:
+    if elovalue is None:
+        return None
+
+    if elosorted is None:
+        elosorted = sorted(
+            p.elo for p in Player.players.values()
+            if getattr(p, "elo", None) is not None
+        )
+
+    n = len(elosorted)
+    if n == 0:
+        return None
+
+    idx = bisect_right(elosorted, elovalue)
+    return idx / n
+
 # Calls to Start.gg API
 def fetchData(query, variables, headers, path):
     alldata = []
@@ -187,7 +213,7 @@ def fetchData(query, variables, headers, path):
     time.sleep(3)
 
     return alldata
-        
+
 # First step for the algorithm. Update players and map them to their globalID
 def mapPlayers(data):
     # Reset entrants
@@ -253,6 +279,115 @@ def mapCharacters(data):
                         #players[entrants[k["entrant"]["id"]][0]][6][characters[k["selectionValue"]]] += 1
         except: # Games not reported
             continue
+
+# Map sets
+def mapSets(data, dqlist, tournamentLink):
+    for i in data:
+        # Skip if DQ
+        if str(i["id"]) in dqlist:
+            continue
+        else:
+            # Process set
+            setid = i["id"]
+            guest = False
+            # Get Players Instances
+            winner = Player.entrants[i["winnerId"]][0]
+            try:
+                p1 = Player.entrants[i["slots"][0]["entrant"]["id"]][0]
+                p2 = Player.entrants[i["slots"][1]["entrant"]["id"]][0]
+
+                p1elo = p1.elo
+                p2elo = p2.elo
+                p1globalid = p1.globalid
+                p2globalid = p2.globalid
+            except:
+                # One player is guest
+                guest = True
+
+                if i["slots"][0]["entrant"]["id"] not in Player.entrants:
+                    p1elo = None
+                    p1globalid = 0
+
+                    p2 = Player.entrants[i["slots"][1]["entrant"]["id"]][0]
+                    p2elo = p2.elo
+                    p2globalid = p2.globalid
+                if i["slots"][1]["entrant"]["id"] not in Player.entrants:
+                    p2elo = None
+                    p2globalid = 0
+                
+                    p1 = Player.entrants[i["slots"][0]["entrant"]["id"]][0]
+                    p1elo = p1.elo
+                    p1globalid = p1.globalid
+
+                # Both are guests
+                if i["slots"][0]["entrant"]["id"] not in Player.entrants and i["slots"][1]["entrant"]["id"] not in Player.entrants:
+                    continue
+
+            # Map Entrants ID's
+            winnerid = i["winnerId"]
+            p1id = i["slots"][0]["entrant"]["id"]
+            p2id = i["slots"][1]["entrant"]["id"]
+            # Vars
+            p1score = []
+            p2score = []
+            p1characters = []
+            p2characters = []
+            stages = []
+            gameCount = 0
+            # Process Each game
+            for j in i["games"]:
+                gameCount += 1
+                # Scores
+                if j["winnerId"] == p1id:
+                    p1score.append(1)
+                    p2score.append(0)
+                else:
+                    p2score.append(1)
+                    p1score.append(0)
+                # Stages
+                try:
+                    stages.append(j["stage"]["name"])
+                except: # Stage is None
+                    stages.append(None)
+                # Characters
+                p1char = None
+                p2char = None
+                for k in j.get("selections", []) or []:
+                    if k.get("selectionType") != "CHARACTER":
+                        continue
+                    entrant = k.get("entrant", {})
+                    eid = entrant.get("id")
+                    val = k.get("selectionValue")
+                    if eid == p1id:
+                        p1char = characters[val]
+                    elif eid == p2id:
+                        p2char = characters[val]
+                p1characters.append(p1char)
+                p2characters.append(p2char)
+
+            # Determine Notable Win
+            if guest == False:
+                if p1id == winnerid:
+                    winnerelo = p1elo
+                    loserelo = p2elo
+                    winnerglobalid = p1globalid
+                else:
+                    winnerelo = p2elo
+                    loserelo = p2elo
+                    winnerglobalid = p2globalid
+                winnerprob = winProb(winnerelo, loserelo)
+                elopool = sorted(p.elo for p in Player.players.values() if p.elo is not None)
+                loserelopool = eloPercentile(loserelo, elopool)
+
+                notablewin = (winnerprob is not None and loserelopool is not None and winnerprob <= 0.25 and loserelopool >= 0.80)
+            else:
+                notablewin = False
+
+            # Insert into DB
+            tournamentid = executeQuery("""SELECT id FROM tournaments WHERE startgg = ?""", (tournamentLink,))[0][0]
+            
+            executeQuery("""REPLACE INTO sets (id, tournamentid, p1id, p2id, winnerid, p1score, p2score, p1characters, p2characters, stages, winnerpreelo, loserpreelo, notablewins) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                            (int(setid), tournamentid, p1globalid, p2globalid, winnerglobalid, json.dumps(p1score, ensure_ascii=True), json.dumps(p2score, ensure_ascii=True), json.dumps(p1characters, ensure_ascii=True), json.dumps(p2characters, ensure_ascii=True), json.dumps(stages, ensure_ascii=True), winnerelo, loserelo, notablewin))
 
 ### Querys for Start.gg API's
 
@@ -324,6 +459,24 @@ query EventPlacements($eventSlug: String!, $page: Int!) {
   }
 }
 """
+queryDetailedSets = """
+    query EventSets($eventSlug: String!, $page: Int!) {
+        event(slug: $eventSlug) {
+            sets(page: $page, perPage: 50, sortType: STANDARD) {
+                nodes {
+                    id
+                    winnerId
+                    slots { entrant { id } }
+                    games {
+                    winnerId
+                    selections { selectionType selectionValue entrant { id } }
+                    stage { name }
+                    }
+                }
+            }
+        }
+    }
+"""
 
 ### Setup
 
@@ -365,6 +518,12 @@ for tourney in tournamentData:
     playersdata = fetchData(queryAttendees, variables, headers, ["event", "entrants"])
     mapPlayers(playersdata)
 
+    # Set up DQ list
+    dqlist = tourney[3].split("|")
+    # Get sets and save them
+    detailedsetsdata = fetchData(queryDetailedSets, variables, headers, ["event", "sets"])
+    mapSets(detailedsetsdata, dqlist, startgg)
+
     # Get sets and update ELO
     setsdata = fetchData(querySets, variables, headers, ["event", "sets"])
     mapCharacters(setsdata)
@@ -373,8 +532,6 @@ for tourney in tournamentData:
     for globalid, player in Player.players.items():
         lastelo[globalid] = player.elo
 
-    # Set up DQ list
-    dqlist = tourney[3].split("|")
     guests = updateElo(setsdata, k, dqlist, bannedregionplayers) # This function also counts the games for each player to help for next step
 
     # Get placements and update Placement points
