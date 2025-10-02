@@ -104,7 +104,7 @@ characters = {
 }
 bannedregionplayersdict = {
     "test": [],
-    "cba": [2045211, 3062615, 2110319, 863905, 3061033, 2788991, 3083847, 1975365, 3065743, 1039246, 2883101, 2618737],
+    "cba": [2045211, 3062615, 2110319, 863905, 3061033, 2788991, 3083847, 1975365, 3065743, 1039246, 2883101, 2618737, 2448564, 1673007, 1846138, 2762576, 2527284],
     "jujuy": [],
     "santafe": [],
     "bsas": [],
@@ -120,7 +120,7 @@ if option == "1":
     # Start from scratch
     executeQuery("""delete from attendees where rankingid = 'arg'""")
     executeQuery("""delete from rankings where rankingid = 'arg'""")
-    tournamentCSV = "tournaments2024"
+    tournamentCSV = "tournaments2025"
 elif option == "2":
     # Ask ranking to update
     option2 = input("1 - Update Arg Ranking | Or write the region you want to update the ranking for: ")
@@ -156,7 +156,7 @@ else:
 
 # ELO
 defaultelo = 1500 # Everyone starts at this ELO
-k = 8 # High -> More data | Low -> Less data
+k = 28 # High -> More data | Low -> Less data
 
 ### Functions
 # maxi
@@ -188,12 +188,21 @@ def eloPercentile(elovalue, elosorted: list[float] | None = None) -> float | Non
 def fetchData(query, variables, headers, path):
     alldata = []
     page = 1
+    maxRetries = 5
 
     while True:
         # Get data until it is empty
         variables["page"] = page
-        response = requests.post(url, json={"query": query, "variables": variables}, headers=headers)
-        data = response.json()
+        #response = requests.post(url, json={"query": query, "variables": variables}, headers=headers)
+        #data = response.json()
+
+        for i in range(maxRetries):
+            response = requests.post(url, json={"query": query, "variables": variables}, headers=headers)
+            if response.status_code != 200:
+                time.sleep(5)
+            else:
+                data = response.json()
+                break
 
         # Iterates each string in path list
         nodes = data["data"]
@@ -210,7 +219,7 @@ def fetchData(query, variables, headers, path):
         page += 1
 
     # Cooldown to not exceed API rate limit
-    time.sleep(3)
+    time.sleep(5)
 
     return alldata
 
@@ -291,7 +300,9 @@ def mapSets(data, dqlist, tournamentLink):
             setid = i["id"]
             guest = False
             # Get Players Instances
-            winner = Player.entrants[i["winnerId"]][0]
+            if i["winnerId"] == None:
+                continue
+            #winner = Player.entrants[i["winnerId"]][0] # Traceback here. Theory: If winner is guest, no entrant id. Prepare for winner being GUEST
             try:
                 p1 = Player.entrants[i["slots"][0]["entrant"]["id"]][0]
                 p2 = Player.entrants[i["slots"][1]["entrant"]["id"]][0]
@@ -304,24 +315,25 @@ def mapSets(data, dqlist, tournamentLink):
                 # One player is guest
                 guest = True
 
-                if i["slots"][0]["entrant"]["id"] not in Player.entrants:
+                # Both are guests
+                if i["slots"][0]["entrant"]["id"] not in Player.entrants and i["slots"][1]["entrant"]["id"] not in Player.entrants:
+                    continue
+                # P1 is guest
+                elif i["slots"][0]["entrant"]["id"] not in Player.entrants:
                     p1elo = None
                     p1globalid = 0
 
                     p2 = Player.entrants[i["slots"][1]["entrant"]["id"]][0]
                     p2elo = p2.elo
                     p2globalid = p2.globalid
-                if i["slots"][1]["entrant"]["id"] not in Player.entrants:
+                # P2 is guest
+                elif i["slots"][1]["entrant"]["id"] not in Player.entrants:
                     p2elo = None
                     p2globalid = 0
                 
                     p1 = Player.entrants[i["slots"][0]["entrant"]["id"]][0]
                     p1elo = p1.elo
                     p1globalid = p1.globalid
-
-                # Both are guests
-                if i["slots"][0]["entrant"]["id"] not in Player.entrants and i["slots"][1]["entrant"]["id"] not in Player.entrants:
-                    continue
 
             # Map Entrants ID's
             winnerid = i["winnerId"]
@@ -335,6 +347,9 @@ def mapSets(data, dqlist, tournamentLink):
             stages = []
             gameCount = 0
             # Process Each game
+            if i["games"] == None:
+                continue
+
             for j in i["games"]:
                 gameCount += 1
                 # Scores
@@ -381,6 +396,14 @@ def mapSets(data, dqlist, tournamentLink):
 
                 notablewin = (winnerprob is not None and loserelopool is not None and winnerprob <= 0.25 and loserelopool >= 0.80)
             else:
+                if p1id == winnerid:
+                    winnerelo = p1elo
+                    loserelo = p2elo
+                    winnerglobalid = p1globalid
+                else:
+                    winnerelo = p2elo
+                    loserelo = p2elo
+                    winnerglobalid = p2globalid
                 notablewin = False
 
             # Insert into DB
@@ -460,22 +483,22 @@ query EventPlacements($eventSlug: String!, $page: Int!) {
 }
 """
 queryDetailedSets = """
-    query EventSets($eventSlug: String!, $page: Int!) {
-        event(slug: $eventSlug) {
-            sets(page: $page, perPage: 50, sortType: STANDARD) {
-                nodes {
-                    id
-                    winnerId
-                    slots { entrant { id } }
-                    games {
-                    winnerId
-                    selections { selectionType selectionValue entrant { id } }
-                    stage { name }
-                    }
+query EventSets($eventSlug: String!, $page: Int!) {
+    event(slug: $eventSlug) {
+        sets(page: $page, perPage: 25, sortType: STANDARD) {
+            nodes {
+                id
+                winnerId
+                slots { entrant { id } }
+                games {
+                winnerId
+                selections { selectionType selectionValue entrant { id } }
+                stage { name }
                 }
             }
         }
     }
+}
 """
 
 ### Setup
@@ -512,7 +535,8 @@ for tourney in tournamentData:
     # Save tournament in database
     date = datetime.strptime(tourney[5], "%d/%m/%Y").date()
     startgg = "https://start.gg/" + tourney[0]
-    executeQuery("""insert ignore into tournaments (name, date, region, startgg, format, attendees) values (?, ?, ?, ?, ?, ?)""", (tourney[1], date, tourney[4], startgg, tourney[2], 0))
+    logoPath = f"Media/TournamentLogos/{tourney[1]}"
+    executeQuery("""insert ignore into tournaments (name, date, region, startgg, format, attendees, logo) values (?, ?, ?, ?, ?, ?, ?)""", (tourney[1], date, tourney[4], startgg, tourney[2], 0, logoPath))
 
     # Get all tournament attendees and update global list
     playersdata = fetchData(queryAttendees, variables, headers, ["event", "entrants"])
@@ -569,8 +593,8 @@ if option == "1":
         print(f"{count} - {player.name}: {rank} | {player.globalid}")     
         # Save ranking into DB
         executeQuery("""
-            insert into rankings (rankingid, playerid, rank, elo, pp, wins, losses, characters, ntourneys)
-            values ('arg', ?, ?, ?, ?, ?, ?, ?, ?)
+            insert into rankings (rankingid, playerid, rank, elo, pp, wins, losses, characters, ntourneys, top)
+            values ('arg', ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             player.globalid,
             rank,
@@ -579,7 +603,8 @@ if option == "1":
             player.wins,
             player.losses,
             json.dumps(player.characters),
-            player.ntourneys
+            player.ntourneys,
+            count
         ))
 
         executeQuery("""
@@ -591,7 +616,7 @@ if option == "1":
         ))
 
         executeQuery("""
-            update rankingdata set tournamentcount = ? where id = 'arg
+            update rankingdata set tournamentcount = ? where id = 'arg'
         """, (
             tournamentCount,
         ))
@@ -607,12 +632,12 @@ else:
         if player.globalid in bannedregionplayers:
             continue
         count += 1
-        print(f"{count} - {player.name}: {rank} | ELO: {player.elo} - PP: {player.pp}")
+        print(f"{count} - {player.name}: {rank} | ELO: {player.elo} - PP: {player.pp} | ID: {playerid}")
         print(player.name, player.characters)   
         newranking[player.globalid] = count
         executeQuery("""
-                  replace into rankings (rankingid, playerid, rank, elo, pp, wins, losses, characters, ntourneys)
-                  values (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                  replace into rankings (rankingid, playerid, rank, elo, pp, wins, losses, characters, ntourneys, top)
+                  values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
               """, (
                   rankingid,
                   player.globalid,
@@ -622,7 +647,8 @@ else:
                   player.wins,
                   player.losses,
                   json.dumps(player.characters),
-                  player.ntourneys
+                  player.ntourneys,
+                  count
               ))
 
         executeQuery("""
