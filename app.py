@@ -156,7 +156,7 @@ else:
 
 # ELO
 defaultelo = 1500 # Everyone starts at this ELO
-k = 28 # High -> More data | Low -> Less data
+k = 32 # High -> More data | Low -> Less data # I dont know yet the value of this thing :(
 
 ### Functions
 # maxi
@@ -303,6 +303,11 @@ def mapSets(data, dqlist, tournamentLink):
             if i["winnerId"] == None:
                 continue
             #winner = Player.entrants[i["winnerId"]][0] # Traceback here. Theory: If winner is guest, no entrant id. Prepare for winner being GUEST
+            # Skip BS AS Resurrection Bracket Sets
+            phase = i["phaseGroup"]["phase"]["name"]
+            if phase.upper() == "RESURRECTION BRACKET":
+                print("❌ SKIPPED RESURRECTION BRACKET SET. THANKS BUENOS AIRES! (mapSets)")
+                continue
             try:
                 p1 = Player.entrants[i["slots"][0]["entrant"]["id"]][0]
                 p2 = Player.entrants[i["slots"][1]["entrant"]["id"]][0]
@@ -442,6 +447,11 @@ query EventSets($eventSlug: String!, $page: Int!) {
         id
         completedAt
         winnerId
+        phaseGroup {
+          id
+          displayIdentifier
+          phase { id name }
+        }
         slots {
           entrant {
             id
@@ -489,6 +499,11 @@ query EventSets($eventSlug: String!, $page: Int!) {
             nodes {
                 id
                 winnerId
+                phaseGroup {
+                    id
+                    displayIdentifier
+                    phase { id name }
+                }
                 slots { entrant { id } }
                 games {
                 winnerId

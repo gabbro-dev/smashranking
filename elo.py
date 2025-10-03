@@ -27,6 +27,11 @@ def updateElo(data, k, dqlist, bannedregionplayers):
         winnerid = bracket["winnerId"]
         player1 = bracket["slots"][0]["entrant"]["id"]
         player2 = bracket["slots"][1]["entrant"]["id"]
+        # Skip BS AS Resurrection Bracket Sets
+        phase = bracket["phaseGroup"]["phase"]["name"]
+        if phase.upper() == "RESURRECTION BRACKET":
+            print("❌ SKIPPED RESURRECTION BRACKET SET. THANKS BUENOS AIRES! (updateElo)")
+            continue
 
         # Determine winner
         if winnerid == player1:
@@ -50,7 +55,7 @@ def updateElo(data, k, dqlist, bannedregionplayers):
             newLoserelo = calculateElo(Player.entrants[loser][0].elo, Player.entrants[winner][0].elo, 0, k)
         except:
             # User is guest / doesnt exist
-            print("❕ User is guest / doesnt existe in updateElo()")
+            #print("❕ User is guest / doesnt exist in updateElo()")
 
             winnerisguest = loserisguest = False
 
