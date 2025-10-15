@@ -49,7 +49,7 @@ def validBaseFor(placement, nplayers, placementBase):
     return placementBase.get(placement, 0) if placement in allowed else 0
 
 def calculatePoints(placement, nplayers, topelos,
-                    basesize=32, harshness=4):
+                    basesize=basesize, harshness=harshness):
     global placementBase
 
     base = validBaseFor(placement, nplayers, placementBase)
@@ -81,17 +81,13 @@ def updatePlacement(placementdata, tournamentid, guests, lastelo, option, option
                 continue
         except:
             # User is guest / doesnt exist
-            #print("❕ Non existent user not valid for nplayers in: updatePlacement()")
             continue
-        #print(f"Player: {players[entrants[entrantid][0]][0]} | ELO: {players[entrants[entrantid][0]][1]}")
         nplayers += 1
         presentattendees.append(entrantid)
-        #print(f"Elo for {players[entrants[entrantid][0]][0]}: {lastelo[entrants[entrantid][0]]}")
     nplayers += len(guests) # To count for guests
 
     # Update N players in database for this tournament
     executeQuery("""update tournaments set attendees = ? where id = ?""", (nplayers, tournamentid))
-    print("Players in tourney:", nplayers)
 
     # ChatGPT new avgelo
     placements = {}
@@ -119,7 +115,6 @@ def updatePlacement(placementdata, tournamentid, guests, lastelo, option, option
         try:
             gid = Player.entrants[eid][0].globalid
             topelos.append(lastelo.get(gid, 1500.0))
-            print(f"Top 8 elo para este torneo: {Player.entrants[eid][0].name} | {lastelo.get(gid, 1500.0)}")
         except:
             topelos.append(1500.0)
 
@@ -127,7 +122,6 @@ def updatePlacement(placementdata, tournamentid, guests, lastelo, option, option
     for i in placementdata:
         # Check if DQ / user did not participate
         if i["standing"] == None:
-            #print("❕ Skipped Placement calculations for non existent user in: updatePlacement()")
             continue
 
         entrantid = i["id"]
@@ -136,21 +130,17 @@ def updatePlacement(placementdata, tournamentid, guests, lastelo, option, option
         # Dont update if didnt participate
         try:
             if entrantid not in presentattendees:
-                #print("SKIPPED NON PRESENT ATTENDEE:", players[entrants[entrantid][0]][0])
                 continue
             if Player.entrants[entrantid][1] < 1:
                 continue
         except:
             # User is guest / doesnt exist
-            #print("❕ Skipped Placement calculations for non existent user in: updatePlacement()")
             continue
 
         # Update points and ntourneys
         points = calculatePoints(placement, nplayers, topelos)
         Player.entrants[entrantid][0].pp += points
         Player.entrants[entrantid][0].ntourneys += 1
-
-        #print(f"{players[entrants[entrantid][0]][0]} | Points: {points} | Placement: {placement}")
 
         # Additionaly save the attendee ELO / PP variation in the database
         if option == "1":

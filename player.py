@@ -4,7 +4,7 @@ class Player:
     players = {} # globalid -> player instance
     entrants = {} # entrantid -> [playerinstance, ngames]
 
-    def __init__(self, globalid, name, elo, pp, sponsor = None, ntourneys = 0, wins = 0, losses = 0, characters=None):
+    def __init__(self, globalid, name, elo, pp, sponsor = None, ntourneys = 0, wins = 0, losses = 0, characters=None, region=None, ci=0):
         self.globalid = globalid
         self.name = name
         self.elo = elo
@@ -14,6 +14,8 @@ class Player:
         self.wins = wins
         self.losses = losses
         self.characters = characters if characters is not None else {}
+        self.region = region if region is not None else {'Salta': 0, 'Buenos Aires': 0, 'Cordoba': 0, 'Jujuy': 0, 'Santa Fe': 0, 'Mendoza': 0}
+        self.ci = ci
 
         Player.players[globalid] = self
 

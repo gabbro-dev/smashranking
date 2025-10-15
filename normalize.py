@@ -1,11 +1,14 @@
+import csv
+#
 from player import Player
 
 ### Functions to normalize the scores
 
 # Vars
 
-eloweight = 0.6
-placementweight = 0.4
+eloweight = 0.4
+placementweight = 0.2
+formpointsweight = 0.2
 ranking = {} # globalid: [name, sponsor, rank, elo, placementpoints, [wins, losses], {characters}, ntourneys] <-- ELO and PP not normalized
 
 tourneycount = {
@@ -17,20 +20,29 @@ tourneycount = {
 
 def normalize(highestelo, lowestelo, highestplacement, lowestplacement):
     global ranking
+    # First import form
+    formcsv = open("form.csv", mode="r", newline="", encoding="utf-8")
+    formplayers = csv.reader(formcsv)
+    formtop50 = {}
+    for i in formplayers:
+        formtop50[i[0]] = int(i[2]) # ID -> Form points
+    highestformpoints = max(formtop50.values())
+    lowestformpoints = min(formtop50.values())
     # Normalize, calculate ranking score and store it in ranking
     for globalid, player in Player.players.items():
         # Normalize ELO
         elo = (player.elo - lowestelo) / (highestelo - lowestelo)
-        #print(f"Normalized elo: {data[1]} -> {elo}")
         # Normalize placement points
         placement = (player.pp - lowestplacement) / (highestplacement - lowestplacement)
-        #print(f"Normalized placement: {data[2]} -> {placement}")
+        # Normalize form points
+        if player.id in formtop50:
+            formpoints = (formtop50[player.id] - lowestformpoints) / (highestformpoints - lowestformpoints)
+        else:
+            formpoints = 0.5
+        # Get final score
         rank = eloweight * elo + placementweight * placement
         # Lower final ranking if low tournament count to balance low data
-        #print(f"Rank before multiplier for {players[playerid][0]}: {rank}")
         rank *= tourneycount.get(player.ntourneys, 1)
-        #print(f"Rank after multiplier for {players[playerid][0]}: {rank}")
-        #print(f"{data[0]} multiplier was {tourneycount.get(data[4], 1)}")
         # Separate Sponsor from name
         playertag = player.name.split("|")
         if len(playertag) == 1:
@@ -43,7 +55,6 @@ def normalize(highestelo, lowestelo, highestplacement, lowestplacement):
             sponsor = sponsor[:-1].strip()
             name = playertag[-1].strip()
 
-        print(f"DEBUG: Player: {globalid} | Sponsor: {sponsor} - Name: {name}")
         player.name = name
         player.sponsor = sponsor
 

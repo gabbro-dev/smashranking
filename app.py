@@ -8,6 +8,17 @@ from placement import updatePlacement
 from normalize import normalize
 from db import executeQuery
 from player import Player
+from shrink import shrinkElo
+
+### Function to import vars from TXT file
+
+def importVars(var):
+    onevaluevars = [3, 4, 6, 7, 10, 11, 12]
+    with open("vars.txt", mode="r", encoding="utf-8", newline="") as varsfile:
+        lines = varsfile.readlines()
+        # Return desired var
+        if var in onevaluevars:
+            return float(lines[var].split("=")[1])
 
 ### Vars
 
@@ -112,34 +123,38 @@ bannedregionplayersdict = {
 }
 
 ### Menu: Start from scratch or from database
-print("Made by Floripundo, Neiel was not here neither was Wadi. Choose an option:")
-option = input("1 - Arg Ranking | 2 - Update Ranking (add tourneys) | Or Write the region you want to run the algorithm for: ")
+print("Made by Floripundo. Choose an option to run the algorithm for:")
+option = input("1 - Argentina Ranking | 2 - Update Current Ranking (add tourneys) | Or Write the region you want to run the algorithm for: ")
 option2 = None
 
 if option == "1":
     # Start from scratch
     executeQuery("""delete from attendees where rankingid = 'arg'""")
     executeQuery("""delete from rankings where rankingid = 'arg'""")
+    executeQuery("""delete from sets where rankingid = 'arg'""")
     tournamentCSV = "tournaments2025"
 elif option == "2":
     # Ask ranking to update
     option2 = input("1 - Update Arg Ranking | Or write the region you want to update the ranking for: ")
     if option2 == "1":
         # Update Arg Ranking
-        data = executeQuery("""select p.name, p.sponsor, r.playerid, r.elo, r.pp, r.wins, r.losses, r.characters, r.ntourneys from rankings r join players p on p.id = r.playerid where rankingid = 'arg'""")
+        data = executeQuery("""select p.name, p.sponsor, r.playerid, r.elo, r.pp, r.wins, r.losses, r.characters, r.ntourneys, p.region from rankings r join players p on p.id = r.playerid where rankingid = 'arg' order by rank desc""")
+        count = 0 # For calculating variation in ranking
+        lastranking = {}
         for i in data:
-            Player(i[2], i[0], float(i[3]), float(i[4]), i[1], i[8], i[5], i[6], ast.literal_eval(i[7]))
+            count += 1   
+            Player(i[2], i[0], float(i[3]), float(i[4]), i[1], i[8], i[5], i[6], ast.literal_eval(i[7]), i[8], i[9])
+            lastranking[i[2]] = count
 
         tournamentCSV = "Update/arg"
     else:
         # Update region ranking
-        data = executeQuery("""select p.name, p.sponsor, r.playerid, r.elo, r.pp, r.wins, r.losses, r.characters, r.ntourneys from rankings r join players p on p.id = r.playerid where rankingid = ? order by rank desc""", (option2.lower(),))
+        data = executeQuery("""select p.name, p.sponsor, r.playerid, r.elo, r.pp, r.wins, r.losses, r.characters, r.ntourneys, p.region from rankings r join players p on p.id = r.playerid where rankingid = ? order by rank desc""", (option2.lower(),))
         count = 0 # For calculating variation in ranking
         lastranking = {}
         for i in data:
             count += 1
-            Player(i[2], i[0], float(i[3]), float(i[4]), i[1], i[8], i[5], i[6], ast.literal_eval(i[7]))
-            print(i[2], i[0], float(i[3]), float(i[4]), i[1], i[8], i[5], i[6])
+            Player(i[2], i[0], float(i[3]), float(i[4]), i[1], i[8], i[5], i[6], ast.literal_eval(i[7]), i[8], i[9])
             lastranking[i[2]] = count
 
         tournamentCSV = "Update/" + option2.lower()
@@ -155,11 +170,11 @@ else:
 ### Params
 
 # ELO
+k = 32 # High -> More data | Low -> Less data
 defaultelo = 1500 # Everyone starts at this ELO
-k = 32 # High -> More data | Low -> Less data # I dont know yet the value of this thing :(
 
 ### Functions
-# maxi
+
 # Calculate win chance
 def winProb(winnerelo, loserelo) -> float | None:
     if winnerelo is None or loserelo is None:
@@ -223,8 +238,8 @@ def fetchData(query, variables, headers, path):
 
     return alldata
 
-# First step for the algorithm. Update players and map them to their globalID
-def mapPlayers(data):
+# First step for the algorithm. Update players and map them to their globalID / Update their region
+def mapPlayers(data, tourneyRegion):
     # Reset entrants
     Player.resetEntrants()
 
@@ -234,10 +249,8 @@ def mapPlayers(data):
             globalid = i["participants"][0]["user"]["id"]
         except:
             if i["participants"][0]["user"] == None:
-                #print(f"❕ Skipped player without Start.gg account: {i["name"]}")
                 pass
             else:
-                #print(f"❗ Error while processing a player: {i}")
                 pass
 
             continue
@@ -262,9 +275,12 @@ def mapPlayers(data):
                     executeQuery("""insert ignore into players (id, name) values (?, ?)""", (globalid, i["name"]))
             else:
                 Player(globalid, i["name"], defaultelo, 0)
+                Player.getPlayer(globalid).region[tourneyRegion] += 1
                 executeQuery("""insert ignore into players (id, name) values (?, ?)""", (globalid, i["name"]))
         else:
             Player.getPlayer(globalid).name = i["name"]
+            if option == "1":
+                Player.getPlayer(globalid).region[tourneyRegion] += 1
 
         # Update tourney player list
         entrantid = i["id"]
@@ -282,15 +298,13 @@ def mapCharacters(data):
                         continue
                     if characters[k["selectionValue"]] not in Player.entrants[k["entrant"]["id"]][0].characters:
                         Player.entrants[k["entrant"]["id"]][0].characters[characters[k["selectionValue"]]] = 1
-                        #players[entrants[k["entrant"]["id"]][0]][6][characters[k["selectionValue"]]] = 1
                     else:
                         Player.entrants[k["entrant"]["id"]][0].characters[characters[k["selectionValue"]]] += 1
-                        #players[entrants[k["entrant"]["id"]][0]][6][characters[k["selectionValue"]]] += 1
         except: # Games not reported
             continue
 
 # Map sets
-def mapSets(data, dqlist, tournamentLink):
+def mapSets(data, dqlist, tournamentLink, option, option2):
     for i in data:
         # Skip if DQ
         if str(i["id"]) in dqlist:
@@ -302,11 +316,9 @@ def mapSets(data, dqlist, tournamentLink):
             # Get Players Instances
             if i["winnerId"] == None:
                 continue
-            #winner = Player.entrants[i["winnerId"]][0] # Traceback here. Theory: If winner is guest, no entrant id. Prepare for winner being GUEST
-            # Skip BS AS Resurrection Bracket Sets
+            # Skip BS AS Resurrection Bracket Sets. This is specific to Argentina, you can just remove this if you dont need it.
             phase = i["phaseGroup"]["phase"]["name"]
             if phase.upper() == "RESURRECTION BRACKET":
-                print("❌ SKIPPED RESURRECTION BRACKET SET. THANKS BUENOS AIRES! (mapSets)")
                 continue
             try:
                 p1 = Player.entrants[i["slots"][0]["entrant"]["id"]][0]
@@ -411,11 +423,20 @@ def mapSets(data, dqlist, tournamentLink):
                     winnerglobalid = p2globalid
                 notablewin = False
 
+            # Determine rankingid
+            if option == "1":
+                rankingid = 'arg'
+            else:
+                if option != "2":
+                    rankingid = option
+                else:
+                    rankingid = option2
+
             # Insert into DB
             tournamentid = executeQuery("""SELECT id FROM tournaments WHERE startgg = ?""", (tournamentLink,))[0][0]
             
-            executeQuery("""REPLACE INTO sets (id, tournamentid, p1id, p2id, winnerid, p1score, p2score, p1characters, p2characters, stages, winnerpreelo, loserpreelo, notablewins) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                            (int(setid), tournamentid, p1globalid, p2globalid, winnerglobalid, json.dumps(p1score, ensure_ascii=True), json.dumps(p2score, ensure_ascii=True), json.dumps(p1characters, ensure_ascii=True), json.dumps(p2characters, ensure_ascii=True), json.dumps(stages, ensure_ascii=True), winnerelo, loserelo, notablewin))
+            executeQuery("""REPLACE INTO sets (id, tournamentid, p1id, p2id, winnerid, p1score, p2score, p1characters, p2characters, stages, winnerpreelo, loserpreelo, notablewins, rankingid) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                            (int(setid), tournamentid, p1globalid, p2globalid, winnerglobalid, json.dumps(p1score, ensure_ascii=True), json.dumps(p2score, ensure_ascii=True), json.dumps(p1characters, ensure_ascii=True), json.dumps(p2characters, ensure_ascii=True), json.dumps(stages, ensure_ascii=True), winnerelo, loserelo, notablewin, rankingid))
 
 ### Querys for Start.gg API's
 
@@ -555,13 +576,13 @@ for tourney in tournamentData:
 
     # Get all tournament attendees and update global list
     playersdata = fetchData(queryAttendees, variables, headers, ["event", "entrants"])
-    mapPlayers(playersdata)
+    mapPlayers(playersdata, tourney[4])
 
     # Set up DQ list
     dqlist = tourney[3].split("|")
     # Get sets and save them
     detailedsetsdata = fetchData(queryDetailedSets, variables, headers, ["event", "sets"])
-    mapSets(detailedsetsdata, dqlist, startgg)
+    mapSets(detailedsetsdata, dqlist, startgg, option, option2)
 
     # Get sets and update ELO
     setsdata = fetchData(querySets, variables, headers, ["event", "sets"])
@@ -579,6 +600,11 @@ for tourney in tournamentData:
     updatePlacement(placementdata, tournamentid, guests, lastelo, option, option2) # This function also updates the tournaments attendees for the database and their ELO / PP change per player
 
     processCount += 1
+"""
+# If National Ranking, Shrink ELO
+if option == "1" or option2 == "arg":
+    CI, eloshrunk = shrinkElo()
+"""
 
 # All params and scores calculated. Normalize data
 
@@ -598,14 +624,13 @@ ranking = normalize(highestelo, lowestelo, highestplacement, lowestplacement)
 count = 0
 # Argentina Ranking
 if option == "1":
-    print("FINAL RANK ARGENTINA 2024")
+    print("FINAL RANK ARGENTINA")
     for playerid, (player, rank) in ranking:
         if player.globalid in bannedplayers:
-            print(f"❌ BANNED PLAYER: {player.name} | {player.globalid}")
             continue
 
         count += 1
-        print(f"{count} - {player.name}: {rank} | {player.globalid}")     
+        print(f"{count} - {player.name}: {rank} | ELO: {player.elo} - PP: {player.pp}")     
         # Save ranking into DB
         executeQuery("""
             insert into rankings (rankingid, playerid, rank, elo, pp, wins, losses, characters, ntourneys, top)
@@ -622,11 +647,15 @@ if option == "1":
             count
         ))
 
+        # Calculate region
+        region, topcount = max(player.region.items(), key=lambda kv: kv[1])
+
         executeQuery("""
-            update players set name = ?, sponsor = ? where id = ?
+            update players set name = ?, sponsor = ?, region = ? where id = ?
         """, (
             player.name,
             player.sponsor,
+            region,
             player.globalid
         ))
 
@@ -635,20 +664,22 @@ if option == "1":
         """, (
             tournamentCount,
         ))
-# Region Ranking
+# Region Ranking / update ranking
 else:
-    if option != "2":
+    if option != "2": # if Region
         rankingid = option
-    else:
-        rankingid = option2
+    else: # updating
+        if option2 == "1": # Updating arg
+            rankingid = 'arg'
+        else: # Updating Region
+            rankingid = option2
     print(f"FINAL RANK {option.upper()}")
     newranking = {}
     for playerid, (player, rank) in ranking:
         if player.globalid in bannedregionplayers:
             continue
         count += 1
-        print(f"{count} - {player.name}: {rank} | ELO: {player.elo} - PP: {player.pp} | ID: {playerid}")
-        print(player.name, player.characters)   
+        print(f"{count} - {player.name}: {rank} | ELO: {player.elo} - PP: {player.pp}") 
         newranking[player.globalid] = count
         executeQuery("""
                   replace into rankings (rankingid, playerid, rank, elo, pp, wins, losses, characters, ntourneys, top)
@@ -683,7 +714,6 @@ if option == "2":
         lastTop = lastranking.get(globalid, None)
         if lastTop != None:
             variation = lastTop - newTop
-            print(Player.getPlayer(globalid).name, variation)
         else:
             variation = 0
-        executeQuery("""update rankings set variation = ? where playerid = ? and rankingid = ?""", (variation, globalid, option2))
+        executeQuery("""update rankings set variation = ? where playerid = ? and rankingid = ?""", (variation, globalid, rankingid))
