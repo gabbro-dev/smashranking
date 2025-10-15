@@ -1,4 +1,5 @@
 from player import Player
+from importvars import importVars
 
 ### Functions for calculating ELO
 
@@ -30,7 +31,6 @@ def updateElo(data, k, dqlist, bannedregionplayers):
         # Skip BS AS Resurrection Bracket Sets
         phase = bracket["phaseGroup"]["phase"]["name"]
         if phase.upper() == "RESURRECTION BRACKET":
-            print("❌ SKIPPED RESURRECTION BRACKET SET. THANKS BUENOS AIRES! (updateElo)")
             continue
 
         # Determine winner
@@ -45,7 +45,6 @@ def updateElo(data, k, dqlist, bannedregionplayers):
         try:
             # If its region ranking algorithm, skip region banned players
             if Player.entrants[winner][0].globalid in bannedregionplayers or Player.entrants[loser][0].globalid in bannedregionplayers:
-                #print(f"❕ Skipped ELO calculations for out of region user in: updateElo() | {players[entrants[winner][0]][0]} VS. {players[entrants[loser][0]][0]}")
                 # Count games to determine DQ
                 Player.entrants[winner][1] += 1
                 Player.entrants[loser][1] += 1
@@ -55,16 +54,14 @@ def updateElo(data, k, dqlist, bannedregionplayers):
             newLoserelo = calculateElo(Player.entrants[loser][0].elo, Player.entrants[winner][0].elo, 0, k)
         except:
             # User is guest / doesnt exist
-            #print("❕ User is guest / doesnt exist in updateElo()")
-
             winnerisguest = loserisguest = False
 
             # Create / Update temporary profiles for guests
             if winner not in Player.entrants:
-                guests[winner] = 1500
+                guests[winner] = importVars(4)
                 winnerisguest = True
             if loser not in Player.entrants:
-                guests[loser] = 1500
+                guests[loser] = importVars(4)
                 loserisguest = True
 
             # Both guests

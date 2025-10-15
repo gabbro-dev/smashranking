@@ -9,20 +9,11 @@ from normalize import normalize
 from db import executeQuery
 from player import Player
 from shrink import shrinkElo
-
-### Function to import vars from TXT file
-
-def importVars(var):
-    onevaluevars = [3, 4, 6, 7, 10, 11, 12]
-    with open("vars.txt", mode="r", encoding="utf-8", newline="") as varsfile:
-        lines = varsfile.readlines()
-        # Return desired var
-        if var in onevaluevars:
-            return float(lines[var].split("=")[1])
+from importvars import importVars
 
 ### Vars
 
-bannedplayers = [341901, 1227278, 135383, 635540, 1451270, 298485, 433945, 2709007, 2522784, 437848, 780143, 2501934, 510667, 1683659] # Not Argentinians
+bannedplayers = importVars(15) # Not Argentinians
 bannedregionplayers = [] # For region rankings
 characters = {
     1271: "Bayonetta",
@@ -113,14 +104,7 @@ characters = {
     1846: "Kazuya",
     1897: "Sora"
 }
-bannedregionplayersdict = {
-    "test": [],
-    "cba": [2045211, 3062615, 2110319, 863905, 3061033, 2788991, 3083847, 1975365, 3065743, 1039246, 2883101, 2618737, 2448564, 1673007, 1846138, 2762576, 2527284],
-    "jujuy": [],
-    "santafe": [],
-    "bsas": [],
-    "salta": []
-}
+bannedregionplayersdict = importVars("regionbans")
 
 ### Menu: Start from scratch or from database
 print("Made by Floripundo. Choose an option to run the algorithm for:")

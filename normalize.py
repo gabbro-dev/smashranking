@@ -1,26 +1,23 @@
 import csv
 #
 from player import Player
+from importvars import importVars
 
 ### Functions to normalize the scores
 
 # Vars
 
-eloweight = 0.4
-placementweight = 0.2
-formpointsweight = 0.2
+eloweight = importVars(10)
+placementweight = importVars(11)
+formpointsweight = importVars(12)
 ranking = {} # globalid: [name, sponsor, rank, elo, placementpoints, [wins, losses], {characters}, ntourneys] <-- ELO and PP not normalized
 
-tourneycount = {
-    0: 0,
-    1: 0.1,
-    2: 0.5,
-    3: 0.75
-}
+tourneycount = importVars(13)
 
 def normalize(highestelo, lowestelo, highestplacement, lowestplacement):
     global ranking
-    # First import form
+    # Import form
+    """
     formcsv = open("form.csv", mode="r", newline="", encoding="utf-8")
     formplayers = csv.reader(formcsv)
     formtop50 = {}
@@ -28,6 +25,7 @@ def normalize(highestelo, lowestelo, highestplacement, lowestplacement):
         formtop50[i[0]] = int(i[2]) # ID -> Form points
     highestformpoints = max(formtop50.values())
     lowestformpoints = min(formtop50.values())
+    """
     # Normalize, calculate ranking score and store it in ranking
     for globalid, player in Player.players.items():
         # Normalize ELO
@@ -35,10 +33,12 @@ def normalize(highestelo, lowestelo, highestplacement, lowestplacement):
         # Normalize placement points
         placement = (player.pp - lowestplacement) / (highestplacement - lowestplacement)
         # Normalize form points
+        """
         if player.id in formtop50:
             formpoints = (formtop50[player.id] - lowestformpoints) / (highestformpoints - lowestformpoints)
         else:
             formpoints = 0.5
+        """
         # Get final score
         rank = eloweight * elo + placementweight * placement
         # Lower final ranking if low tournament count to balance low data

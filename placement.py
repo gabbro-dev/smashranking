@@ -2,6 +2,7 @@ import math
 #
 from db import executeQuery
 from player import Player
+from importvars import importVars
 
 ### Functions for calculating placement
 
@@ -12,29 +13,15 @@ def calculatePoints(placement, nplayers, avgelo, basesize=32, harshness=0.8):
     global placementBase
     base = placementBase.get(placement, 0)
     scale = min((nplayers / basesize) ** harshness, 1)
-    points = base * scale * (avgelo / 1500)
+    points = base * scale * (avgelo / importVars(4))
     return points
 """
 
 # Vars
 
-placementBase = {
-  1: 100,
-  2: 70,
-  3: 50,
-  4: 35,
-  5: 25,
-  7: 15,
-  9: 10,
-  13: 6,
-  17: 4,
-  21: 3,
-  25: 2,
-  33: 1,
-  65: 0.5
-}
-harshness = 4 # Adjusts the penalty for tournaments with attendees count below base size
-basesize = 32
+placementBase = importVars(8)
+harshness = importVars(6) # Adjusts the penalty for tournaments with attendees count below base size
+basesize = importVars(7)
 
 def validBaseFor(placement, nplayers, placementBase):
     if nplayers < 16:
@@ -64,7 +51,7 @@ def calculatePoints(placement, nplayers, topelos,
         k = min(8, len(topelos))
         mean_top = sum(sorted(topelos, reverse=True)[:k]) / k
         # Normalizar con clamp para evitar runaway
-        strength_w = 1 + (mean_top - 1500) / 600.0
+        strength_w = 1 + (mean_top - importVars(4)) / 600.0
         strength_w = max(0.90, min(strength_w, 1.15))
 
     return round(base * size_w * strength_w, 3)
@@ -101,10 +88,10 @@ def updatePlacement(placementdata, tournamentid, guests, lastelo, option, option
     for entrantid, plc in placements.items():
         try:
             player = Player.entrants[entrantid][0]
-            elopre = lastelo.get(player.globalid, 1500.0)
+            elopre = lastelo.get(player.globalid, importVars(4))
         except:
             # Guest
-            elopre = 1500.0
+            elopre = importVars(4)
         ranked.append((plc, -elopre, entrantid))
 
     ranked.sort()
@@ -114,9 +101,9 @@ def updatePlacement(placementdata, tournamentid, guests, lastelo, option, option
     for eid in top8entrants:
         try:
             gid = Player.entrants[eid][0].globalid
-            topelos.append(lastelo.get(gid, 1500.0))
+            topelos.append(lastelo.get(gid, importVars(4)))
         except:
-            topelos.append(1500.0)
+            topelos.append(importVars(4))
 
     # Update points per player
     for i in placementdata:
