@@ -170,8 +170,8 @@ else:
 ### Params
 
 # ELO
-k = 32 # High -> More data | Low -> Less data
-defaultelo = 1500 # Everyone starts at this ELO
+k = importVars(3) # High -> More data | Low -> Less data
+defaultelo = importVars(4) # Everyone starts at this ELO
 
 ### Functions
 
