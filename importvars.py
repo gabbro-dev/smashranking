@@ -3,7 +3,7 @@
 def importVars(var):
     onevaluevars = [3, 4, 6, 7, 10, 11, 12]
     dicvars = [8, 13]
-    arrayvars = [15]
+    arrayvars = [15, 16]
     with open("vars.txt", mode="r", encoding="utf-8", newline="") as varsfile:
         lines = varsfile.readlines()
         # Return desired var

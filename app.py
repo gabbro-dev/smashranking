@@ -105,6 +105,7 @@ characters = {
     1897: "Sora"
 }
 bannedregionplayersdict = importVars("regionbans")
+shadowbans = importVars(16)
 
 ### Menu: Start from scratch or from database
 print("Made by Floripundo. Choose an option to run the algorithm for:")
@@ -610,7 +611,7 @@ count = 0
 if option == "1":
     print("FINAL RANK ARGENTINA")
     for playerid, (player, rank) in ranking:
-        if player.globalid in bannedplayers:
+        if player.globalid in bannedplayers or player.globalid in shadowbans:
             continue
 
         count += 1

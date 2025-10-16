@@ -35,7 +35,14 @@ def validBaseFor(placement, nplayers, placementBase):
 
     return placementBase.get(placement, 0) if placement in allowed else 0
 
-def calculatePoints(placement, nplayers, topelos,
+def calculatePointsRegion(placement, nplayers, avgelo, basesize=32, harshness=0.8):
+    global placementBase
+    base = placementBase.get(placement, 0)
+    scale = min((nplayers / basesize) ** harshness, 1)
+    points = base * scale * (avgelo / importVars(4))
+    return points
+
+def calculatePointsArg(placement, nplayers, topelos,
                     basesize=basesize, harshness=harshness):
     global placementBase
 
@@ -58,7 +65,17 @@ def calculatePoints(placement, nplayers, topelos,
 
 def updatePlacement(placementdata, tournamentid, guests, lastelo, option, option2):
     # Initial count for number of present attendes and average elo
-    nplayers = 0
+    nplayers = sumelo = 0
+    # Identify ranking type
+    if option == "1":
+        rankingid = "arg"
+    elif option == "2":
+        if option2 == "1":
+            rankingid = "arg"
+        else:
+            rankingid = option2.lower()
+    else:
+        rankingid = option.lower()
     # List of present attendees to not reward abscent ones
     presentattendees = []
     for i in placementdata:
@@ -71,19 +88,20 @@ def updatePlacement(placementdata, tournamentid, guests, lastelo, option, option
             continue
         nplayers += 1
         presentattendees.append(entrantid)
+        sumelo += lastelo[Player.entrants[entrantid][0].globalid]
     nplayers += len(guests) # To count for guests
 
     # Update N players in database for this tournament
     executeQuery("""update tournaments set attendees = ? where id = ?""", (nplayers, tournamentid))
-
-    # ChatGPT new avgelo
+    # AVG elo for region
+    avgelo = (sumelo + importVars(4) * len(guests)) / nplayers
+    # AVG elo for Arg
     placements = {}
     for i in placementdata:
         if i.get("standing") is None:
             continue
         placements[i["id"]] = i["standing"]["placement"]
 
-    # Lista ordenable: (placement asc, -elopre desc, entrantid)
     ranked = []
     for entrantid, plc in placements.items():
         try:
@@ -125,15 +143,12 @@ def updatePlacement(placementdata, tournamentid, guests, lastelo, option, option
             continue
 
         # Update points and ntourneys
-        points = calculatePoints(placement, nplayers, topelos)
+        if rankingid == "arg":
+            points = calculatePointsArg(placement, nplayers, topelos)
+        else:
+            points = calculatePointsRegion(placement, nplayers, avgelo)
         Player.entrants[entrantid][0].pp += points
         Player.entrants[entrantid][0].ntourneys += 1
 
         # Additionaly save the attendee ELO / PP variation in the database
-        if option == "1":
-            rankingid = "arg"
-        elif option == "2":
-            rankingid = option2.lower()
-        else:
-            rankingid = option.lower()
         executeQuery("""REPLACE INTO attendees (playerid, tournamentid, points, elo, placement, rankingid) VALUES (?, ?, ?, ?, ?, ?)""", (Player.entrants[entrantid][0].globalid, tournamentid, round(points, 3), Player.entrants[entrantid][0].elo, placement, rankingid))
