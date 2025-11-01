@@ -34,8 +34,8 @@ def normalize(highestelo, lowestelo, highestplacement, lowestplacement):
         placement = (player.pp - lowestplacement) / (highestplacement - lowestplacement)
         # Normalize form points
         """
-        if player.id in formtop50:
-            formpoints = (formtop50[player.id] - lowestformpoints) / (highestformpoints - lowestformpoints)
+        if player.globalid in formtop50:
+            formpoints = (formtop50[player.globalid] - lowestformpoints) / (highestformpoints - lowestformpoints)
         else:
             formpoints = 0.5
         """

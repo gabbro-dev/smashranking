@@ -1,5 +1,5 @@
 import requests, os, csv, time, json, ast
-from datetime import datetime
+from datetime import datetime,timezone
 from dotenv import load_dotenv
 from bisect import bisect_right
 #
@@ -106,6 +106,21 @@ characters = {
 }
 bannedregionplayersdict = importVars("regionbans")
 shadowbans = importVars(16)
+phaselabels = {
+    "Winners Semi-Final": "WSF",
+    "Winners Final": "WF",
+    "Grand Final": "GF",
+    "Grand Final Reset": "GFR",
+    "Losers Quarter-Final": "LQF",
+    "Losers Semi-Final": "LSF",
+    "Losers Final": "LF"
+}
+brackettypelabels = {
+    "ROUND_ROBIN": "RR",
+    "MATCHMAKING": "MM",
+    "LADDER": "LADDER",
+    "SWISS": "SWISS"
+}
 
 ### Menu: Start from scratch or from database
 print("Made by Floripundo. Choose an option to run the algorithm for:")
@@ -159,6 +174,12 @@ k = importVars(3) # High -> More data | Low -> Less data
 defaultelo = importVars(4) # Everyone starts at this ELO
 
 ### Functions
+
+# Copy for calculating ELO in mapSets to predict new elo
+def calculateElo(player, opponent, score, k):
+    expected = 1 / (1 + 10 ** ((opponent - player) / 400))
+    newelo = player + k * (score - expected)
+    return round(newelo, 3)
 
 # Calculate win chance
 def winProb(winnerelo, loserelo) -> float | None:
@@ -290,6 +311,8 @@ def mapCharacters(data):
 
 # Map sets
 def mapSets(data, dqlist, tournamentLink, option, option2):
+    global k, defaultelo
+
     for i in data:
         # Skip if DQ
         if str(i["id"]) in dqlist:
@@ -297,6 +320,32 @@ def mapSets(data, dqlist, tournamentLink, option, option2):
         else:
             # Process set
             setid = i["id"]
+            # Label and timestamp set
+            rawsettimestamp = i.get("startedAt") or i.get("startAt") or i.get("completedAt")
+            if rawsettimestamp is not None:
+                try:
+                    settimestamp = datetime.fromtimestamp(int(rawsettimestamp), tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+                except (TypeError, ValueError, OSError):
+                    settimestamp = None
+            else:
+                settimestamp = None
+            # Double elimination
+            if i["phaseGroup"]["bracketType"] == "DOUBLE_ELIMINATION":
+                if i["round"] < 0:
+                    bracket = "L. "
+                else:
+                    bracket = "W. "
+
+                if i["phaseGroup"]["phase"]["name"].upper() == "TOP 8":
+                    if i["fullRoundText"] == "Losers Round 1":
+                        label = "L.T8"
+                    else:
+                        label = phaselabels.get(i["fullRoundText"], f"{bracket}Pools")
+                else:
+                    label = phaselabels.get(i["fullRoundText"], f"{bracket}Pools")
+            # Another format
+            else:
+                label = brackettypelabels.get(i["phaseGroup"]["bracketType"], "Pools")
             guest = False
             # Get Players Instances
             if i["winnerId"] == None:
@@ -322,7 +371,7 @@ def mapSets(data, dqlist, tournamentLink, option, option2):
                     continue
                 # P1 is guest
                 elif i["slots"][0]["entrant"]["id"] not in Player.entrants:
-                    p1elo = None
+                    p1elo = defaultelo
                     p1globalid = 0
 
                     p2 = Player.entrants[i["slots"][1]["entrant"]["id"]][0]
@@ -330,7 +379,7 @@ def mapSets(data, dqlist, tournamentLink, option, option2):
                     p2globalid = p2.globalid
                 # P2 is guest
                 elif i["slots"][1]["entrant"]["id"] not in Player.entrants:
-                    p2elo = None
+                    p2elo = defaultelo
                     p2globalid = 0
                 
                     p1 = Player.entrants[i["slots"][0]["entrant"]["id"]][0]
@@ -350,61 +399,102 @@ def mapSets(data, dqlist, tournamentLink, option, option2):
             gameCount = 0
             # Process Each game
             if i["games"] == None:
-                continue
+                # Thanks Buenos Aires! anoten bien car*jo >:(
+                score1 = i["slots"][0]["standing"]["stats"]["score"]["value"]
+                score2 = i["slots"][1]["standing"]["stats"]["score"]["value"]
 
-            for j in i["games"]:
-                gameCount += 1
-                # Scores
-                if j["winnerId"] == p1id:
-                    p1score.append(1)
-                    p2score.append(0)
-                else:
-                    p2score.append(1)
-                    p1score.append(0)
-                # Stages
-                try:
-                    stages.append(j["stage"]["name"])
-                except: # Stage is None
-                    stages.append(None)
-                # Characters
-                p1char = None
-                p2char = None
-                for k in j.get("selections", []) or []:
-                    if k.get("selectionType") != "CHARACTER":
-                        continue
-                    entrant = k.get("entrant", {})
-                    eid = entrant.get("id")
-                    val = k.get("selectionValue")
-                    if eid == p1id:
-                        p1char = characters[val]
-                    elif eid == p2id:
-                        p2char = characters[val]
-                p1characters.append(p1char)
-                p2characters.append(p2char)
+                p1characters = [None]
+                p2characters = [None]
+                stages = [None]
 
-            # Determine Notable Win
-            if guest == False:
+
                 if p1id == winnerid:
-                    winnerelo = p1elo
-                    loserelo = p2elo
+                    """ To be able to calculate the elo gain / loss for each set, i would need to proccess the ELO while proccessing the sets.
+                    winnerpreelo = p1elo
+                    loserpreelo = p2elo
+                    #
+                    newWinnerelo = calculateElo(winnerpreelo, loserpreelo, 1, k)
+                    newLoserelo = calculateElo(loserpreelo, winnerpreelo, 0, k)
+                    """
                     winnerglobalid = p1globalid
+                    if score1 == None or score2 == None:
+                        p1score = [None]
+                        p2score = [None]
+                    else:
+                        if score1 > score2:
+                            p1score = [score1]
+                            p2score = [score2]
+                        else:
+                            p1score = [score2]
+                            p2score = [score1]
                 else:
-                    winnerelo = p2elo
-                    loserelo = p2elo
+                    """ To be able to calculate the elo gain / loss for each set, i would need to proccess the ELO while proccessing the sets.
+                    winnerpreelo = p2elo
+                    loserpreelo = p1elo
+                    #
+                    newWinnerelo = calculateElo(winnerpreelo, loserpreelo, 1, k)
+                    newLoserelo = calculateElo(loserpreelo, winnerpreelo, 0, k)
+                    """
                     winnerglobalid = p2globalid
-                winnerprob = winProb(winnerelo, loserelo)
-                elopool = sorted(p.elo for p in Player.players.values() if p.elo is not None)
-                loserelopool = eloPercentile(loserelo, elopool)
-
-                notablewin = (winnerprob is not None and loserelopool is not None and winnerprob <= 0.25 and loserelopool >= 0.80)
+                    if score1 == None or score2 == None:
+                        p1score = [None]
+                        p2score = [None]
+                    else:
+                        if score1 > score2:
+                            p2score = [score1]
+                            p1score = [score2]
+                        else:
+                            p2score = [score2]
+                            p1score = [score1]
+                notablewin = False
             else:
+                for j in i["games"]:
+                    gameCount += 1
+                    # Scores
+                    if j["winnerId"] == p1id:
+                        p1score.append(1)
+                        p2score.append(0)
+                    else:
+                        p2score.append(1)
+                        p1score.append(0)
+                    # Stages
+                    try:
+                        stages.append(j["stage"]["name"])
+                    except: # Stage is None
+                        stages.append(None)
+                    # Characters
+                    p1char = None
+                    p2char = None
+                    for l in j.get("selections", []) or []:
+                        if l.get("selectionType") != "CHARACTER":
+                            continue
+                        entrant = l.get("entrant", {})
+                        eid = entrant.get("id")
+                        val = l.get("selectionValue")
+                        if eid == p1id:
+                            p1char = characters[val]
+                        elif eid == p2id:
+                            p2char = characters[val]
+                    p1characters.append(p1char)
+                    p2characters.append(p2char)
+                #
                 if p1id == winnerid:
-                    winnerelo = p1elo
-                    loserelo = p2elo
+                    """ To be able to calculate the elo gain / loss for each set, i would need to proccess the ELO while proccessing the sets.
+                    winnerpreelo = p1elo
+                    loserpreelo = p2elo
+                    #
+                    newWinnerelo = calculateElo(winnerpreelo, loserpreelo, 1, k)
+                    newLoserelo = calculateElo(loserpreelo, winnerpreelo, 0, k)
+                    """
                     winnerglobalid = p1globalid
                 else:
-                    winnerelo = p2elo
-                    loserelo = p2elo
+                    """ To be able to calculate the elo gain / loss for each set, i would need to proccess the ELO while proccessing the sets.
+                    winnerpreelo = p2elo
+                    loserpreelo = p1elo
+                    #
+                    newWinnerelo = calculateElo(winnerpreelo, loserpreelo, 1, k)
+                    newLoserelo = calculateElo(loserpreelo, winnerpreelo, 0, k)
+                    """
                     winnerglobalid = p2globalid
                 notablewin = False
 
@@ -420,8 +510,8 @@ def mapSets(data, dqlist, tournamentLink, option, option2):
             # Insert into DB
             tournamentid = executeQuery("""SELECT id FROM tournaments WHERE startgg = ?""", (tournamentLink,))[0][0]
             
-            executeQuery("""REPLACE INTO sets (id, tournamentid, p1id, p2id, winnerid, p1score, p2score, p1characters, p2characters, stages, winnerpreelo, loserpreelo, notablewins, rankingid) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                            (int(setid), tournamentid, p1globalid, p2globalid, winnerglobalid, json.dumps(p1score, ensure_ascii=True), json.dumps(p2score, ensure_ascii=True), json.dumps(p1characters, ensure_ascii=True), json.dumps(p2characters, ensure_ascii=True), json.dumps(stages, ensure_ascii=True), winnerelo, loserelo, notablewin, rankingid))
+            executeQuery("""REPLACE INTO sets (id, tournamentid, p1id, p2id, winnerid, p1score, p2score, p1characters, p2characters, stages, winnerpreelo, loserpreelo, notablewins, rankingid, round, `timestamp`, newwinnerelo, newloserelo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                            (int(setid), tournamentid, p1globalid, p2globalid, winnerglobalid, json.dumps(p1score, ensure_ascii=True), json.dumps(p2score, ensure_ascii=True), json.dumps(p1characters, ensure_ascii=True), json.dumps(p2characters, ensure_ascii=True), json.dumps(stages, ensure_ascii=True), 0, 0, notablewin, rankingid, label, settimestamp, 0, 0))
 
 ### Querys for Start.gg API's
 
@@ -505,12 +595,23 @@ query EventSets($eventSlug: String!, $page: Int!) {
             nodes {
                 id
                 winnerId
+                fullRoundText
+                round
+                state
+                startedAt
+                startAt
+                completedAt
                 phaseGroup {
                     id
                     displayIdentifier
+                    bracketType
                     phase { id name }
                 }
-                slots { entrant { id } }
+                slots { entrant { id }
+                        standing {
+                            stats { score { value label }}
+                        }
+                 }
                 games {
                 winnerId
                 selections { selectionType selectionValue entrant { id } }
