@@ -68,10 +68,10 @@ def updatePlacement(placementdata, tournamentid, guests, lastelo, option, option
     nplayers = sumelo = 0
     # Identify ranking type
     if option == "1":
-        rankingid = "arg"
+        rankingid = "arg26"
     elif option == "2":
         if option2 == "1":
-            rankingid = "arg"
+            rankingid = "arg26"
         else:
             rankingid = option2.lower()
     else:
@@ -143,7 +143,7 @@ def updatePlacement(placementdata, tournamentid, guests, lastelo, option, option
             continue
 
         # Update points and ntourneys
-        if rankingid == "arg":
+        if rankingid == "arg26":
             points = calculatePointsArg(placement, nplayers, topelos)
         else:
             points = calculatePointsRegion(placement, nplayers, avgelo)

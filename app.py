@@ -129,16 +129,16 @@ option2 = None
 
 if option == "1":
     # Start from scratch
-    executeQuery("""delete from attendees where rankingid = 'arg'""")
-    executeQuery("""delete from rankings where rankingid = 'arg'""")
-    executeQuery("""delete from sets where rankingid = 'arg'""")
-    tournamentCSV = "tournaments2025"
+    executeQuery("""delete from attendees where rankingid = 'arg26'""")
+    #executeQuery("""delete from rankings where rankingid = 'arg26'""")
+    executeQuery("""delete from sets where rankingid = 'arg26'""")
+    tournamentCSV = "tournaments2026"
 elif option == "2":
     # Ask ranking to update
     option2 = input("1 - Update Arg Ranking | Or write the region you want to update the ranking for: ")
     if option2 == "1":
         # Update Arg Ranking
-        data = executeQuery("""select p.name, p.sponsor, r.playerid, r.elo, r.pp, r.wins, r.losses, r.characters, r.ntourneys, p.region from rankings r join players p on p.id = r.playerid where rankingid = 'arg' order by rank desc""")
+        data = executeQuery("""select p.name, p.sponsor, r.playerid, r.elo, r.pp, r.wins, r.losses, r.characters, r.ntourneys, p.region from rankings r join players p on p.id = r.playerid where rankingid = 'arg26' order by rank desc""")
         count = 0 # For calculating variation in ranking
         lastranking = {}
         for i in data:
@@ -146,7 +146,8 @@ elif option == "2":
             Player(i[2], i[0], float(i[3]), float(i[4]), i[1], i[8], i[5], i[6], ast.literal_eval(i[7]), i[8], i[9])
             lastranking[i[2]] = count
 
-        tournamentCSV = "Update/arg"
+        tournamentCSV = "Update/arg26"
+        bannedregionplayers = bannedplayers
     else:
         # Update region ranking
         data = executeQuery("""select p.name, p.sponsor, r.playerid, r.elo, r.pp, r.wins, r.losses, r.characters, r.ntourneys, p.region from rankings r join players p on p.id = r.playerid where rankingid = ? order by rank desc""", (option2.lower(),))
@@ -240,7 +241,7 @@ def fetchData(query, variables, headers, path):
         page += 1
 
     # Cooldown to not exceed API rate limit
-    time.sleep(5)
+    time.sleep(20)
 
     return alldata
 
@@ -500,17 +501,20 @@ def mapSets(data, dqlist, tournamentLink, option, option2):
 
             # Determine rankingid
             if option == "1":
-                rankingid = 'arg'
+                rankingid = 'arg26'
             else:
                 if option != "2":
                     rankingid = option
                 else:
-                    rankingid = option2
+                    if option2 == "1":
+                        rankingid = 'arg26'
+                    else:
+                        rankingid = option2 # Que desastre xD
 
             # Insert into DB
             tournamentid = executeQuery("""SELECT id FROM tournaments WHERE startgg = ?""", (tournamentLink,))[0][0]
             
-            executeQuery("""REPLACE INTO sets (id, tournamentid, p1id, p2id, winnerid, p1score, p2score, p1characters, p2characters, stages, winnerpreelo, loserpreelo, notablewins, rankingid, round, `timestamp`, newwinnerelo, newloserelo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            executeQuery("""REPLACE sets (id, tournamentid, p1id, p2id, winnerid, p1score, p2score, p1characters, p2characters, stages, winnerpreelo, loserpreelo, notablewins, rankingid, round, `timestamp`, newwinnerelo, newloserelo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                             (int(setid), tournamentid, p1globalid, p2globalid, winnerglobalid, json.dumps(p1score, ensure_ascii=True), json.dumps(p2score, ensure_ascii=True), json.dumps(p1characters, ensure_ascii=True), json.dumps(p2characters, ensure_ascii=True), json.dumps(stages, ensure_ascii=True), 0, 0, notablewin, rankingid, label, settimestamp, 0, 0))
 
 ### Querys for Start.gg API's
@@ -688,7 +692,7 @@ for tourney in tournamentData:
     processCount += 1
 """
 # If National Ranking, Shrink ELO
-if option == "1" or option2 == "arg":
+if option == "1" or option2 == "arg26":
     CI, eloshrunk = shrinkElo()
 """
 
@@ -720,7 +724,7 @@ if option == "1":
         # Save ranking into DB
         executeQuery("""
             insert into rankings (rankingid, playerid, rank, elo, pp, wins, losses, characters, ntourneys, top)
-            values ('arg', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            values ('arg26', ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             player.globalid,
             rank,
@@ -746,7 +750,7 @@ if option == "1":
         ))
 
         executeQuery("""
-            update rankingdata set tournamentcount = ? where id = 'arg'
+            update rankingdata set tournamentcount = ? where id = 'arg26'
         """, (
             tournamentCount,
         ))
@@ -756,7 +760,7 @@ else:
         rankingid = option
     else: # updating
         if option2 == "1": # Updating arg
-            rankingid = 'arg'
+            rankingid = 'arg26'
         else: # Updating Region
             rankingid = option2
     print(f"FINAL RANK {option.upper()}")
