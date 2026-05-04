@@ -1,0 +1,46 @@
+---
+description: Keep README.md and ALGORITHM.md in sync with the ranking algorithm code and config.
+globs: app.py,elo.py,placement.py,normalize.py,player.py,shrink.py,importvars.py,vars.txt,shrink_elo.sql,README.md,ALGORITHM.md
+alwaysApply: false
+---
+
+# Keep ranking docs in sync
+
+`README.md` and `ALGORITHM.md` describe the ranking algorithm in detail (formulas, constants,
+file paths, menu options, DB schema). When you change anything that backs a documented claim,
+update both docs in the same change.
+
+## What to update when
+
+| If you change…                                                | Also update…                                                                                       |
+|---------------------------------------------------------------|----------------------------------------------------------------------------------------------------|
+| `vars.txt` (any value)                                        | The constant in README "Concepts" / "How a player's score is computed" tables, and ALGORITHM §2.1. |
+| `elo.py` formulas, K usage, guest/region-ban handling         | README "Step 1 — ELO" + ALGORITHM §5.                                                              |
+| `placement.py` formulas (`calculatePointsArg`, `Region`)      | README "How much is a tournament 'worth'?" + Penalties table + ALGORITHM §7.                       |
+| `placementBase` table or `validBaseFor` thresholds            | README placement-points table + eligibility bullets + ALGORITHM §7.1 / §7.2.                       |
+| `normalize.py` weighting / low-data multiplier                | README "Step 3" + low-data table + ALGORITHM §8.                                                   |
+| `shrink.py` (CI thresholds, formula)                          | ALGORITHM §9 + README year-handling section if its dormant status changes.                          |
+| `shrink_elo.sql` (carry-over coefficient)                     | README "How things are handled between years" + Penalties table + ALGORITHM §10.                    |
+| `app.py` menu options, CSV paths, banlist behavior            | README "Running it" table + "What makes a tournament 'qualified'" + ALGORITHM §1 / §11.             |
+| Banlist / shadowban / regionban policy                        | README national-vs-region table + ALGORITHM §11.                                                    |
+| New CSV under `Tournaments/`                                  | Repository layout block in README, if it introduces a new pattern.                                  |
+| New stray script / SQL / data file                            | "Stray scripts and files" section in both README and ALGORITHM §13.                                 |
+| DB schema (column, table, query)                              | ALGORITHM §12.                                                                                      |
+
+## How to update
+
+- **Verify before writing.** Open the actual file (`vars.txt`, `placement.py`, …) and quote the
+  current value/expression. Don't trust your memory or the existing prose.
+- **Keep both docs consistent.** README is the plain-language version; ALGORITHM is the precise
+  reference. A formula change must land in both, with the README explanation re-checked for
+  accuracy.
+- **Update the "Penalties — quick reference" table in README** whenever a multiplier, exponent,
+  clamp, or cutoff changes.
+- **Mark dormant code as dormant.** If you re-enable `shrink.py` or `formpointsweight`, drop the
+  "Currently disabled" / "dead code" notes. If you disable something, add them.
+- **No scope creep.** Don't restructure the docs while doing a sync update — keep diffs small.
+
+## Drift audit
+
+When unsure whether the docs match reality, invoke the project skill `audit-ranking-docs`
+(`.cursor/skills/audit-ranking-docs/SKILL.md`) for a checklist-driven comparison.
