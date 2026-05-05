@@ -9,9 +9,8 @@ def calculateElo(player, opponent, score, k):
     return round(newelo, 3)
 
 def updateElo(data, k, dqlist, bannedregionplayers, argelo=None):
-    # argelo: dict[globalid, arg26_elo]. Used so visitors (region-banned players)
-    # in regional rankings score Cordoba locals based on their real national strength
-    # instead of the in-memory defaultelo. Empty/None for national runs.
+    # argelo: {globalid: arg26_elo}. Empty for national runs; populated for
+    # regional runs to score cross-region sets in arg26-space.
     if argelo is None:
         argelo = {}
     defaultelo = importVars(4)
@@ -84,18 +83,14 @@ def updateElo(data, k, dqlist, bannedregionplayers, argelo=None):
         loserBanned = loserPlayer.globalid in bannedregionplayers
 
         if winnerBanned and loserBanned:
-            # Both visitors. Neither will appear in this region's printed ranking,
-            # so there is nothing meaningful to update. Still count games for presence.
+            # Both visitors: nothing to score, just tick presence.
             Player.entrants[winner][1] += 1
             Player.entrants[loser][1] += 1
             continue
 
         if winnerBanned or loserBanned:
-            # Cross-region set. When argelo is populated (regional runs) we score the
-            # set in arg26-space so the gap reflects national calibration. When argelo
-            # is empty (e.g. national arg26-update mode where bannedregionplayers is
-            # the foreigner list) we preserve the legacy behavior of skipping the set
-            # for ELO and only counting presence.
+            # Cross-region: score in arg26-space; presence-only when argelo is
+            # empty (legacy arg26-update mode).
             if argelo:
                 wArg = argelo.get(winnerPlayer.globalid, defaultelo)
                 lArg = argelo.get(loserPlayer.globalid, defaultelo)
@@ -111,7 +106,7 @@ def updateElo(data, k, dqlist, bannedregionplayers, argelo=None):
             Player.entrants[loser][1] += 1
             continue
 
-        # Both local: regular cba26 ELO update path
+        # Both local
         newWinnerelo = calculateElo(winnerPlayer.elo, loserPlayer.elo, 1, k)
         newLoserelo = calculateElo(loserPlayer.elo, winnerPlayer.elo, 0, k)
 

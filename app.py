@@ -168,9 +168,7 @@ else:
     bannedregionplayers = bannedregionplayersdict[option.lower()]
 
 
-### Cross-region strength reference: load arg26 ELOs once for regional runs
-# Used by updateElo and updatePlacement to score visitors by their real national
-# strength instead of treating every visitor as defaultelo.
+### Load arg26 ELOs once so regional runs score visitors by their national strength.
 isRegionalRun = not (option == "1" or (option == "2" and option2 == "1"))
 if isRegionalRun:
     argeloRows = executeQuery("""SELECT playerid, elo FROM rankings WHERE rankingid = 'arg26'""") or []

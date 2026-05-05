@@ -1,10 +1,6 @@
--- Smash Ranking schema bootstrap for local Docker MariaDB.
--- This is a fresh, empty schema that lets `python app.py` run end-to-end against
--- a clean database. To validate against real history, restore your production
--- dump on top of this (it should be a no-op / overwrite).
---
--- Schema is derived from the queries in app.py / placement.py / shrink.py and
--- the inferred description in ALGORITHM.md §12. Types are best-effort.
+-- Schema bootstrap for local Docker MariaDB. Derived from queries in app.py /
+-- placement.py / shrink.py and ALGORITHM.md §12. Restore a production dump on
+-- top of this for real history.
 
 CREATE TABLE IF NOT EXISTS players (
     id        BIGINT      PRIMARY KEY,

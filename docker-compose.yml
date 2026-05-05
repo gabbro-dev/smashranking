@@ -8,8 +8,7 @@ services:
       MARIADB_PASSWORD: b1f2d41cfaa8f1220ad8b453
       MARIADB_ROOT_PASSWORD: 3f2633d82a01736fbb21b2f5
     ports:
-      # Expose to localhost only so non-docker `python app.py` on the host
-      # also works without modifying db.py.
+      # Localhost-only so host `python app.py` can hit the same DB.
       - "127.0.0.1:3306:3306"
     volumes:
       - mariadb_data:/var/lib/mysql
@@ -36,8 +35,7 @@ services:
     volumes:
       - ./:/app
     working_dir: /app
-    # Keep the container alive so you can `docker compose exec app ...`
-    # to run interactive commands (the script uses input() so it needs a TTY).
+    # Stay alive so `docker compose exec app ...` works (script uses input()).
     stdin_open: true
     tty: true
     command: ["sleep", "infinity"]
