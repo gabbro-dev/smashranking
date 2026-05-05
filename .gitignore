@@ -7,3 +7,5 @@ extract.py
 rankingcba.json
 form.csv
 form.py
+# Docker
+.docker-data/

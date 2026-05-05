@@ -1,0 +1,46 @@
+services:
+  mariadb:
+    image: mariadb:11
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: smashranking
+      MARIADB_USER: smash_app
+      MARIADB_PASSWORD: b1f2d41cfaa8f1220ad8b453
+      MARIADB_ROOT_PASSWORD: 3f2633d82a01736fbb21b2f5
+    ports:
+      # Expose to localhost only so non-docker `python app.py` on the host
+      # also works without modifying db.py.
+      - "127.0.0.1:3306:3306"
+    volumes:
+      - mariadb_data:/var/lib/mysql
+      - ./docker/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  app:
+    build: .
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    environment:
+      DB_HOST: mariadb
+      DB_PORT: 3306
+      DB_USER: smash_app
+      DB_PASSWORD: b1f2d41cfaa8f1220ad8b453
+      DB_NAME: smashranking
+    env_file:
+      - .env
+    volumes:
+      - ./:/app
+    working_dir: /app
+    # Keep the container alive so you can `docker compose exec app ...`
+    # to run interactive commands (the script uses input() so it needs a TTY).
+    stdin_open: true
+    tty: true
+    command: ["sleep", "infinity"]
+
+volumes:
+  mariadb_data:

@@ -82,6 +82,30 @@ pip install -r requirements.txt
 python app.py
 ```
 
+### Local Docker setup (optional, for testing)
+
+If you don't want to install MariaDB / Python dependencies on your host, there's a self-contained
+Docker setup that runs everything in containers:
+
+```bash
+# Bring up MariaDB (with the empty schema bootstrapped from docker/schema.sql)
+# and a Python 3.13 container with all dependencies installed.
+docker compose up -d --build
+
+# Run the script. It uses input(), so attach a TTY:
+docker compose exec app python app.py
+```
+
+The MariaDB container exposes `127.0.0.1:3306` so you can also run `python app.py` directly on
+the host (after `pip install -r requirements.txt`) — `db.py` honors `DB_HOST` from the
+environment but defaults to `localhost`.
+
+`docker compose down` stops the containers; `docker compose down -v` also wipes the database
+volume and starts fresh next time. Note: the bootstrapped schema is empty, so a from-scratch
+`arg26` run will pull the entire 2026 season from start.gg, which takes a while and uses API
+quota. For validation against historical data, restore your production dump on top of the
+schema before running.
+
 The script asks an option:
 
 | Option              | What it does                                                                                              |
