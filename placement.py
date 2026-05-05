@@ -63,7 +63,26 @@ def calculatePointsArg(placement, nplayers, topelos,
 
     return round(base * size_w * strength_w, 3)
 
-def updatePlacement(placementdata, tournamentid, guests, lastelo, option, option2):
+def updatePlacement(placementdata, tournamentid, guests, lastelo, option, option2, bannedregionplayers=None, argelo=None):
+    # bannedregionplayers + argelo: when present, region-banned attendees (visitors)
+    # contribute their real arg26 ELO to avg_elo / topelos instead of their cba26
+    # default-1500 in-memory ELO. Field strength then reflects who actually showed up.
+    if bannedregionplayers is None:
+        bannedregionplayers = []
+    if argelo is None:
+        argelo = {}
+    defaultelo = importVars(4)
+
+    def strengthElo(globalid):
+        # Visitors with an arg26 entry -> their arg26 ELO (the new cross-region behavior).
+        # Otherwise -> their pre-tournament in-memory ELO from lastelo (legacy behavior).
+        # The fallback preserves arg26-update mode (where bannedregionplayers is the foreigner
+        # list and argelo is empty) and is also the right thing for visitors who don't have an
+        # arg26 row yet.
+        if globalid in bannedregionplayers and globalid in argelo:
+            return argelo[globalid]
+        return lastelo.get(globalid, defaultelo)
+
     # Initial count for number of present attendes and average elo
     nplayers = sumelo = 0
     # Identify ranking type
@@ -88,13 +107,13 @@ def updatePlacement(placementdata, tournamentid, guests, lastelo, option, option
             continue
         nplayers += 1
         presentattendees.append(entrantid)
-        sumelo += lastelo[Player.entrants[entrantid][0].globalid]
+        sumelo += strengthElo(Player.entrants[entrantid][0].globalid)
     nplayers += len(guests) # To count for guests
 
     # Update N players in database for this tournament
     executeQuery("""update tournaments set attendees = ? where id = ?""", (nplayers, tournamentid))
     # AVG elo for region
-    avgelo = (sumelo + importVars(4) * len(guests)) / nplayers
+    avgelo = (sumelo + defaultelo * len(guests)) / nplayers
     # AVG elo for Arg
     placements = {}
     for i in placementdata:
@@ -106,10 +125,10 @@ def updatePlacement(placementdata, tournamentid, guests, lastelo, option, option
     for entrantid, plc in placements.items():
         try:
             player = Player.entrants[entrantid][0]
-            elopre = lastelo.get(player.globalid, importVars(4))
+            elopre = strengthElo(player.globalid)
         except:
             # Guest
-            elopre = importVars(4)
+            elopre = defaultelo
         ranked.append((plc, -elopre, entrantid))
 
     ranked.sort()
@@ -119,9 +138,9 @@ def updatePlacement(placementdata, tournamentid, guests, lastelo, option, option
     for eid in top8entrants:
         try:
             gid = Player.entrants[eid][0].globalid
-            topelos.append(lastelo.get(gid, importVars(4)))
+            topelos.append(strengthElo(gid))
         except:
-            topelos.append(importVars(4))
+            topelos.append(defaultelo)
 
     # Update points per player
     for i in placementdata:

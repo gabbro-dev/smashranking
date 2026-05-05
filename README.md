@@ -201,8 +201,10 @@ tournament the **sets** and **placements** that count are filtered:
   registrants get no PP and don't count toward `nplayers`.
 - Guests (entrants without a linked start.gg user account) are tracked with a temporary local ELO
   but never persisted, and they don't get PP. They do count toward `nplayers` for size scaling.
-- For regional rankings, sets where **either side is region-banned** are skipped for ELO updates
-  (still counted as "presence").
+- For regional rankings, **cross-region sets** (one local vs one region-banned visitor) score the
+  ELO change in arg26-space — both players are looked up in the national ranking so the gap is
+  apples-to-apples — and the resulting delta is applied to the local player only. Visitor-vs-visitor
+  sets are still skipped (they couldn't move anyone visible in the regional ranking anyway).
 - For the **national** ranking, only the placements that the bracket size justifies award PP
   (see [Tournament "worth"](#how-much-is-a-tournament-worth)). Smaller brackets cut off lower
   placements entirely.
@@ -260,7 +262,8 @@ What each line is doing:
 
 ```
 size_w     = min((nplayers / 32) ^ 0.8, 1.0)
-avg_elo    = average pre-tournament ELO of all present attendees (guests counted at 1500)
+avg_elo    = average pre-tournament ELO of all present attendees
+             (locals: their pre-tournament regional ELO; visitors: their arg26 ELO; guests: 1500)
 strength_w = avg_elo / 1500
 points     = base * size_w * strength_w
 ```
@@ -272,8 +275,10 @@ What each line is doing:
   ≈ 0.574` of its weight, a 24-person bracket keeps `≈ 0.789`. Regional scenes have smaller
   events, so this is by design.
 - **`avg_elo`** is the average pre-tournament ELO of **everyone present**, not just the top 8.
-  Guests (no start.gg account) are counted at the default ELO of 1500 so they don't pull the
-  average around.
+  For each attendee we pick the right rating source: locals use the regional pre-tournament ELO,
+  visitors (region-banned players) use their arg26 ELO so a tournament packed with strong
+  nationals actually scores as a strong field. Guests (no start.gg account) are counted at the
+  default ELO of 1500 so they don't pull the average around.
 - **`strength_w = avg_elo / 1500`** turns that average into a multiplier centered on 1.0:
   every point of average ELO above 1500 increases the weight, below 1500 decreases it. There's
   **no clamp**, so a particularly strong (or weak) regional can move the multiplier more than
@@ -290,7 +295,7 @@ What each line is doing:
 | Tournaments source (fresh)     | `Tournaments/tournaments2026.csv`                           | `Tournaments/Regions/cba26.csv`                             |
 | Tournaments source (update)    | `Tournaments/Update/arg26.csv`                              | `Tournaments/Update/cba26.csv`                              |
 | Banlist                        | `nationbans` in `vars.txt` (foreign players)                | `regionbans["cba26"]` in `vars.txt` (out-of-region players) |
-| What the banlist does          | Pre-seeds known foreigners' ELO; their sets **still affect** Argentinian ELO; they're **excluded from the final printed ranking** | Sets where either side is region-banned are **skipped entirely** for ELO; never appear in ranking |
+| What the banlist does          | Pre-seeds known foreigners' ELO; their sets **still affect** Argentinian ELO; they're **excluded from the final printed ranking** | Sets vs a region-banned visitor are scored **in arg26-space** (both players' arg26 ELOs feed the expected outcome) and the resulting delta is applied only to the local player. Visitor-vs-visitor sets are skipped. Visitors are excluded from the final printed ranking. |
 | Foreign-player pre-ELO seeds   | Peco/Garu = 1600, Flame/Tapia = 1560, Benny Henny/LRBA = 1540, others = 1500 | None                                                        |
 | PP formula                     | `calculatePointsArg` (top-8 ELO, harshness 4)               | `calculatePointsRegion` (avg ELO, harshness 0.8)            |
 | Placement eligibility gating   | Yes (small brackets cut off low placements)                 | No (full table always)                                      |
@@ -351,7 +356,7 @@ isolated dataset. When a new year starts:
 | Few tournaments played     | `× 0` if 0 played, `× 0.3` if 1, `× 0.8` if 2, `× 1.0` from 3 onwards                          |
 | DQ                         | Set ignored — no ELO update                                                                   |
 | Buenos Aires resurrection  | Whole phase ignored                                                                           |
-| Region-banned player       | Sets involving them are skipped for ELO                                                       |
+| Region-banned player       | Cross-region sets score the ELO change in arg26-space (both sides looked up in `arg26`); delta lands on the local player only. Visitor-vs-visitor sets are still skipped. Visitor strength also feeds `avg_elo` for regional PP. |
 | Yearly carry-over          | ELO compressed: `new_elo = 1500 + (old_elo - 1500) * 0.3`                                     |
 
 ---

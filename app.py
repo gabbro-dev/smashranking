@@ -168,6 +168,17 @@ else:
     bannedregionplayers = bannedregionplayersdict[option.lower()]
 
 
+### Cross-region strength reference: load arg26 ELOs once for regional runs
+# Used by updateElo and updatePlacement to score visitors by their real national
+# strength instead of treating every visitor as defaultelo.
+isRegionalRun = not (option == "1" or (option == "2" and option2 == "1"))
+if isRegionalRun:
+    argeloRows = executeQuery("""SELECT playerid, elo FROM rankings WHERE rankingid = 'arg26'""") or []
+    argelo = {int(pid): float(elo) for pid, elo in argeloRows}
+else:
+    argelo = {}
+
+
 ### Params
 
 # ELO
@@ -682,12 +693,12 @@ for tourney in tournamentData:
     for globalid, player in Player.players.items():
         lastelo[globalid] = player.elo
 
-    guests = updateElo(setsdata, k, dqlist, bannedregionplayers) # This function also counts the games for each player to help for next step
+    guests = updateElo(setsdata, k, dqlist, bannedregionplayers, argelo) # This function also counts the games for each player to help for next step
 
     # Get placements and update Placement points
     placementdata = fetchData(queryPlacements, variables, headers, ["event", "entrants"])
     tournamentid = executeQuery("""select id from tournaments where name = ?""", (tourney[1],))[0][0]
-    updatePlacement(placementdata, tournamentid, guests, lastelo, option, option2) # This function also updates the tournaments attendees for the database and their ELO / PP change per player
+    updatePlacement(placementdata, tournamentid, guests, lastelo, option, option2, bannedregionplayers, argelo) # This function also updates the tournaments attendees for the database and their ELO / PP change per player
 
     processCount += 1
 """

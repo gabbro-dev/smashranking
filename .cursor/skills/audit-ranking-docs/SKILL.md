@@ -122,8 +122,11 @@ These come from `app.py` and `elo.py`. Each one is something README/ALGORITHM as
 - Sets with `winnerId == None` are skipped in `app.mapSets`.
 - Guest entrants get a temporary in-memory ELO seeded at `defaultelo`; not persisted; do **not**
   earn PP; **do** count toward `nplayers`.
-- Region-banned players' sets are skipped for ELO updates but still increment the entrant's game
-  counter (so the players count as "present").
+- Region-banned players (visitors): cross-region sets are scored in arg26-space when `argelo` is
+  populated (regional runs); the resulting delta lands on the local player only. When `argelo` is
+  empty (national arg26-update mode), the legacy "skip ELO, count presence" behavior applies.
+  Visitor-vs-visitor sets are skipped for ELO in both modes. Game counters tick in every case so
+  visitors still count as "present".
 - Foreign-player pre-ELO seeds in `app.mapPlayers`:
   - Peco/Garu (135383, 1451270) → 1600
   - Flame/Tapia (780143, 298485) → 1560

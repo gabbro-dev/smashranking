@@ -28,13 +28,14 @@ Detailed documentation of how the ranking is built. This is the long version of 
 ```
 ask user (mode: arg-fresh | arg-update | region-fresh | region-update)
   └─ load existing players from DB if "update", otherwise wipe
+  └─ if regional run: load argelo = {globalid: arg26_elo} from rankings (once)
      └─ for each tournament in the CSV:
         ├─ insert tournament row
         ├─ fetchData(queryAttendees)         → mapPlayers
         ├─ fetchData(queryDetailedSets)      → mapSets         (persists sets to DB)
         ├─ fetchData(querySets)              → mapCharacters   (counts character usage)
-        │                                     → updateElo      (mutates Player.elo)
-        ├─ fetchData(queryPlacements)        → updatePlacement (mutates Player.pp / .ntourneys)
+        │                                     → updateElo(..., argelo)      (mutates Player.elo)
+        ├─ fetchData(queryPlacements)        → updatePlacement(..., bannedregionplayers, argelo)
      └─ normalize across all players
      └─ write rankings rows
      └─ for "update" runs, compute per-player rank variation
@@ -147,7 +148,7 @@ about missing data (a wrapping `try/except` swallows tournaments that don't repo
 
 ## 5. ELO update (`elo.py`)
 
-`updateElo(data, k, dqlist, bannedregionplayers) → guests`.
+`updateElo(data, k, dqlist, bannedregionplayers, argelo=None) → guests`.
 
 ```python
 expected = 1 / (1 + 10 ** ((opponent - player) / 400))
@@ -161,15 +162,28 @@ Steps:
    - Skip if its `id` is in `dqlist`.
    - Skip if `phaseGroup.phase.name == "RESURRECTION BRACKET"` (Buenos Aires).
    - Resolve winner / loser entrants.
-   - **Region ranking guard**: if either player's `globalid ∈ bannedregionplayers`, the set is
-     skipped for ELO **but the entrants' game counters are still incremented**, so they count as
-     "present" attendees for placement-point purposes (tracked but not rewarded).
    - **Guest handling**: if an entrant isn't in `Player.entrants` (no linked start.gg user), it
      gets a temporary in-memory ELO via the `guests` dict, starting at `defaultelo`. Mixed
      guest/normal sets do update the real player's ELO and W/L. Guest-vs-guest sets only update
      the local `guests` dict. Guests are returned so `placement.py` can include them in the
      attendee count.
-   - On a normal set: update ELOs, increment `wins`/`losses` and the entrant's `ngames`.
+   - **Cross-region branch** (regional rankings, `argelo` non-empty): when exactly one of the two
+     real entrants is in `bannedregionplayers`, the expected outcome is computed in **arg26-space**
+     using `argelo.get(globalid, defaultelo)` for both sides, so the ELO gap reflects national
+     calibration instead of the visitor's stub-1500 cba26 value. The resulting `delta = round(k *
+     (1 - expected_winner_in_arg), 3)` is added to the local winner's ELO (or subtracted from the
+     local loser's ELO); only the local player's `wins` / `losses` is incremented. The visitor's
+     in-memory ELO is left alone since they're filtered out at write time.
+   - **Cross-region branch — legacy fallback** (`argelo` empty): in arg26-update mode the menu
+     sets `bannedregionplayers = nationbans` while `argelo` stays empty. To preserve the old
+     behavior in that mode, the cross-region branch only counts presence (game counters tick) and
+     skips ELO updates entirely. The new arg-space scoring is opt-in: it requires `argelo` to be
+     populated, which only happens for regional runs.
+   - **Visitor-vs-visitor**: if both real entrants are in `bannedregionplayers`, the set is
+     skipped for ELO updates (game counters still tick). Neither side will appear in the printed
+     regional ranking, so there's nothing meaningful to update.
+   - **Locals-vs-locals**: regular ELO update, increment `wins`/`losses` and the entrant's
+     `ngames`.
 
 ---
 
@@ -260,12 +274,20 @@ This is the legacy formula, kept for regional rankings. It's softer because:
 - Strength uses the **whole field**, not just the top 8, so it averages closer to 1500.
 - No placement-eligibility gating.
 
-### 7.5 `updatePlacement(placementdata, tournamentid, guests, lastelo, option, option2)`
+### 7.5 `updatePlacement(placementdata, tournamentid, guests, lastelo, option, option2, bannedregionplayers=None, argelo=None)`
 
 1. Builds the list of "present attendees" — entrants whose `Player.entrants[id][1] ≥ 1`
    (≥ 1 set played). These are the only ones who get points.
 2. `nplayers = len(present_real) + len(guests)`. Persists this on `tournaments.attendees`.
-3. Computes `avgelo` (region) and `topelos` (national).
+3. Computes `avgelo` (region) and `topelos` (national). Each attendee's contribution to these
+   numbers comes from a `strengthElo(globalid)` helper that picks the right rating source:
+   - Visitor with an `argelo` entry (regional runs only): their arg26 ELO. This is the cross-
+     region fix — strong nationals show up as strong, weak visitors show up as weak.
+   - Otherwise: `lastelo.get(globalid, defaultelo)`. This covers locals (their pre-tournament
+     regional ELO), visitors with no `arg26` row, and **arg26-update mode** where the menu sets
+     `bannedregionplayers = nationbans` but `argelo` stays empty (so foreigners keep contributing
+     their seeded ELO to `topelos` exactly like before).
+   - Guests: still counted at `defaultelo` for `nplayers` weighting.
 4. For each present attendee, computes points via the appropriate formula and:
    - Adds points to `Player.entrants[entrantid][0].pp`.
    - Increments `ntourneys`.
@@ -392,12 +414,12 @@ Used to feed the seeded ELOs into the front-end (PHP) when bootstrapping a new s
 | Entry CSV (update)               | `Tournaments/Update/arg26.csv`                               | `Tournaments/Update/<region>.csv`                             |
 | Banlist source                   | `nationbans` (line 16)                                       | `regionbans[<rankingid>]` (line 19+)                          |
 | Pre-ELO seeds for foreigners     | Yes (1600/1560/1540/1500)                                    | No                                                            |
-| Set-level treatment of bans      | Banned players' sets **affect** Argentinian ELOs              | Sets **skipped** for ELO (game counter still incremented)     |
+| Set-level treatment of bans      | Banned players' sets **affect** Argentinian ELOs              | Cross-region sets are scored in **arg26-space** (delta lands on the local player only). Visitor-vs-visitor still skipped. |
 | Banned players in final ranking  | Excluded from print and DB write                              | Excluded from print and DB write                              |
 | `shadowbans`                     | Excluded from print and DB write                              | Not used                                                       |
 | PP formula                       | `calculatePointsArg`                                         | `calculatePointsRegion`                                        |
 | `harshness`                      | `4`                                                          | `0.8`                                                         |
-| Strength signal                  | Top-8 pre-ELO mean, clamped 0.90–1.15                         | Average pre-ELO of all attendees (no clamp)                    |
+| Strength signal                  | Top-8 pre-ELO mean, clamped 0.90–1.15                         | Average pre-ELO of all attendees (no clamp). Visitors contribute their `arg26` ELO when available, otherwise `lastelo`. |
 | Placement eligibility gating     | Yes (`validBaseFor`)                                         | No                                                            |
 | `region` tracking on Player      | Updated per tourney                                          | Not touched                                                    |
 | Wipe on fresh run                | `attendees`+`sets` for `arg26`; `rankings` is **not** wiped  | `attendees`+`rankings` for the region; `sets` not wiped        |
@@ -541,6 +563,11 @@ These are documented as-is; some are intentional, some look like rough edges wor
   BRACKET"` skip in both `app.mapSets` and `elo.updateElo`.
 - **Foreign-player ELO seeds** (Peco, Garu, Flame, Tapia, Benny Henny, LRBA→Start) are
   hard-coded by `globalid` in `app.mapPlayers`. Add new ones there if needed.
+- **`argelo` is a one-shot snapshot**, loaded once at the start of a regional run from
+  `rankings WHERE rankingid='arg26'`. It does not refresh as tournaments are processed inside
+  the run, and a from-scratch regional replay uses the *current* arg26 ELOs to score sets that
+  may have happened months ago. Run order matters: ideally update arg26 before re-running the
+  regions, otherwise visitor strength is staler than it could be.
 - **Region tally on player** uses a fixed dict of six regions in `Player.__init__`. If a CSV
   introduces a new region label, `Player.__init__` raises a `KeyError` on
   `region[tourneyRegion] += 1`.
