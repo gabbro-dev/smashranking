@@ -250,7 +250,7 @@ def fetchData(query, variables, headers, path):
         page += 1
 
     # Cooldown to not exceed API rate limit
-    time.sleep(20)
+    time.sleep(5)
 
     return alldata
 

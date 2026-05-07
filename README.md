@@ -8,6 +8,63 @@ For the deeper / formula-by-formula breakdown, see [`ALGORITHM.md`](./ALGORITHM.
 
 ---
 
+## Setting up a local staging environment
+
+*DO NOT RUN IN PRODUCTION*, te estoy mirando a vos flori
+
+To stand up a local MariaDB and load it with a production-shaped dataset in one
+command, run the wrapper script:
+
+```bash
+./scripts/seed-local.sh
+```
+
+End-to-end this takes ~8–15 minutes (most of which is the start.gg API
+rate-limit cooldown) and walks through:
+
+1. Wipes the local `mariadb_data` Docker volume and rebuilds the containers
+   (clean slate, fully reproducible).
+2. Loads the full 2026 national ranking (`arg26`) so the regional run can score
+   visitors against national ELOs.
+3. Loads `cba26` in two passes that respect the *"weeklies need a smaller K and
+   have to be uploaded on their own"* rule:
+   - **Piranha Garden weeklies** with `K = K_WEEKLY`.
+   - **Monthlies** (currently just Dark Winter 2026) with `K = K_MONTHLY`,
+     applied as an update on top.
+4. Prints the top-10 `cba26` ranking + per-`rankingid` row counts so you have
+   immediate at-a-glance verification.
+
+The K factors are constants at the top of `scripts/seed-local.sh`:
+
+```bash
+K_MONTHLY=32
+K_WEEKLY=10.67   # 1/3 of K_MONTHLY
+```
+
+Tweak them and re-run the script; the DB rebuilds end-to-end with no other
+changes required.
+
+### What the script touches
+
+- **DB**: wipes the `mariadb_data` volume — destructive, local-only.
+- **Repo files**: temporarily edits `vars.txt`, `Tournaments/Regions/cba26.csv`,
+  and `Tournaments/Update/cba26.csv` to flip `k=` between runs and split
+  weeklies vs. monthlies. All three are **restored on exit** (success, failure,
+  or Ctrl+C), so `git status` stays clean.
+- **Network**: outbound only to `https://api.start.gg/gql/alpha`. No production
+  credentials, no remote DB writes.
+
+### Prerequisites
+
+- Docker + docker compose.
+- A `.env` at the repo root: `token=<your_startgg_api_token>`.
+- The committed `vars.txt` already has the `cba26: …` regionbans line.
+
+For step-by-step manual control (running individual options yourself, hitting
+the DB by hand, restoring a production dump), see [Running it](#running-it).
+
+---
+
 ## Concepts
 
 A few terms are used over and over in this document. Here's what they mean.
