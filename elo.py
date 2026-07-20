@@ -8,12 +8,7 @@ def calculateElo(player, opponent, score, k):
     newelo = player + k * (score - expected)
     return round(newelo, 3)
 
-def updateElo(data, k, dqlist, bannedregionplayers, argelo=None):
-    # argelo: {globalid: arg26_elo}. Empty for national runs; populated for
-    # regional runs to score cross-region sets in arg26-space.
-    if argelo is None:
-        argelo = {}
-    defaultelo = importVars(4)
+def updateElo(data, k, dqlist, bannedregionplayers):
     # Order data by timestamps. Ignore games that weren't marked as "Completed"
     data = sorted(
         [s for s in data if s.get("completedAt") is not None],
@@ -46,76 +41,63 @@ def updateElo(data, k, dqlist, bannedregionplayers, argelo=None):
             winner = player2
             loser = player1
 
-        # Detect guests (entrants without a linked start.gg user / Player instance)
-        winnerIsGuest = winner not in Player.entrants
-        loserIsGuest = loser not in Player.entrants
+        # Calculate ELO
+        try:
+            # If its region ranking algorithm, skip region banned players
+            if Player.entrants[winner][0].globalid in bannedregionplayers or Player.entrants[loser][0].globalid in bannedregionplayers:
+                # Count games to determine DQ
+                Player.entrants[winner][1] += 1
+                Player.entrants[loser][1] += 1
+                continue
+            
+            newWinnerelo = calculateElo(Player.entrants[winner][0].elo, Player.entrants[loser][0].elo, 1, k)
+            newLoserelo = calculateElo(Player.entrants[loser][0].elo, Player.entrants[winner][0].elo, 0, k)
+        except:
+            # User is guest / doesnt exist
+            winnerisguest = loserisguest = False
 
-        if winnerIsGuest or loserIsGuest:
-            # Guest handling: temporary in-memory ELO that doesn't persist
-            if winnerIsGuest and winner not in guests:
-                guests[winner] = defaultelo
-            if loserIsGuest and loser not in guests:
-                guests[loser] = defaultelo
+            # Create / Update temporary profiles for guests
+            if winner not in Player.entrants:
+                guests[winner] = importVars(4)
+                winnerisguest = True
+            if loser not in Player.entrants:
+                guests[loser] = importVars(4)
+                loserisguest = True
 
-            if winnerIsGuest and loserIsGuest:
+            # Both guests
+            if winnerisguest and loserisguest:
                 newWinnerelo = calculateElo(guests[winner], guests[loser], 1, k)
                 newLoserelo = calculateElo(guests[loser], guests[winner], 0, k)
+
                 guests[winner] = newWinnerelo
                 guests[loser] = newLoserelo
-            elif winnerIsGuest:
+            # Winner is guest
+            elif winnerisguest and loserisguest == False:
                 newWinnerelo = calculateElo(guests[winner], Player.entrants[loser][0].elo, 1, k)
                 newLoserelo = calculateElo(Player.entrants[loser][0].elo, guests[winner], 0, k)
+
                 guests[winner] = newWinnerelo
                 Player.entrants[loser][0].elo = newLoserelo
                 Player.entrants[loser][0].losses += 1
-            else:
+            # Loser is guest
+            elif winnerisguest == False and loserisguest:
                 newWinnerelo = calculateElo(Player.entrants[winner][0].elo, guests[loser], 1, k)
                 newLoserelo = calculateElo(guests[loser], Player.entrants[winner][0].elo, 0, k)
+
                 guests[loser] = newLoserelo
                 Player.entrants[winner][0].elo = newWinnerelo
                 Player.entrants[winner][0].wins += 1
             continue
 
-        # Both are real entrants. Resolve them and check region-ban status.
-        winnerPlayer = Player.entrants[winner][0]
-        loserPlayer = Player.entrants[loser][0]
-        winnerBanned = winnerPlayer.globalid in bannedregionplayers
-        loserBanned = loserPlayer.globalid in bannedregionplayers
+        # Update new ELO
+        Player.entrants[winner][0].elo = newWinnerelo
+        Player.entrants[loser][0].elo = newLoserelo
 
-        if winnerBanned and loserBanned:
-            # Both visitors: nothing to score, just tick presence.
-            Player.entrants[winner][1] += 1
-            Player.entrants[loser][1] += 1
-            continue
+        # Update win / loss
+        Player.entrants[winner][0].wins += 1
+        Player.entrants[loser][0].losses += 1
 
-        if winnerBanned or loserBanned:
-            # Cross-region: score in arg26-space; presence-only when argelo is
-            # empty (legacy arg26-update mode).
-            if argelo:
-                wArg = argelo.get(winnerPlayer.globalid, defaultelo)
-                lArg = argelo.get(loserPlayer.globalid, defaultelo)
-                expectedW = 1 / (1 + 10 ** ((lArg - wArg) / 400))
-                delta = round(k * (1 - expectedW), 3)
-                if not winnerBanned:
-                    winnerPlayer.elo = round(winnerPlayer.elo + delta, 3)
-                    winnerPlayer.wins += 1
-                if not loserBanned:
-                    loserPlayer.elo = round(loserPlayer.elo - delta, 3)
-                    loserPlayer.losses += 1
-            Player.entrants[winner][1] += 1
-            Player.entrants[loser][1] += 1
-            continue
-
-        # Both local
-        newWinnerelo = calculateElo(winnerPlayer.elo, loserPlayer.elo, 1, k)
-        newLoserelo = calculateElo(loserPlayer.elo, winnerPlayer.elo, 0, k)
-
-        winnerPlayer.elo = newWinnerelo
-        loserPlayer.elo = newLoserelo
-
-        winnerPlayer.wins += 1
-        loserPlayer.losses += 1
-
+        # Count games to help next step
         Player.entrants[winner][1] += 1
         Player.entrants[loser][1] += 1
 

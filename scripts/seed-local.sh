@@ -31,6 +31,9 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
+if [[ -x "${REPO_ROOT}/.local-bin/docker" ]]; then
+  export PATH="${REPO_ROOT}/.local-bin:${PATH}"
+fi
 
 VARS_FILE="vars.txt"
 REGIONS_CSV="Tournaments/Regions/cba26.csv"
@@ -78,7 +81,16 @@ set_k() {
 run_app() {
   local desc="$1"; shift
   echo "    $desc"
-  printf '%s\n' "$@" | docker compose exec -T app python -u app.py
+  if [[ "${SEED_USE_HOSTNET:-}" == "1" ]]; then
+    # Bridge networking can be blocked in some environments; host net + localhost DB.
+    printf '%s\n' "$@" | docker run --rm -i --network host \
+      --env-file .env \
+      -e DB_HOST=127.0.0.1 \
+      -v "$REPO_ROOT:/app" -w /app \
+      smashranking-app python -u app.py
+  else
+    printf '%s\n' "$@" | docker compose exec -T app python -u app.py
+  fi
 }
 
 # 1. Reset stack

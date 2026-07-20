@@ -63,6 +63,26 @@ changes required.
 For step-by-step manual control (running individual options yourself, hitting
 the DB by hand, restoring a production dump), see [Running it](#running-it).
 
+### Comparing two branches locally
+
+After Docker Desktop is running (WSL integration enabled):
+
+```bash
+# One-shot: seed + dump on current branch, then on flori, then diff (~30 min)
+./scripts/compare-branches-local.sh
+
+# Or step by step:
+./scripts/seed-local.sh
+./scripts/dump-rankings.sh feat_current
+git checkout flori/cambios-ranking-26-no-pusheados
+./scripts/seed-local.sh
+./scripts/dump-rankings.sh flori
+git checkout -
+./scripts/compare-rankings.sh feat_current flori
+```
+
+Dumps land in `.local-runs/<label>/` as TSVs (`arg26.tsv`, `cba26.tsv`).
+
 ---
 
 ## Concepts

@@ -9,3 +9,6 @@ form.csv
 form.py
 # Docker
 .docker-data/
+.local-bin/
+.local-runs/
+.venv/

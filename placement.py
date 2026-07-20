@@ -63,21 +63,7 @@ def calculatePointsArg(placement, nplayers, topelos,
 
     return round(base * size_w * strength_w, 3)
 
-def updatePlacement(placementdata, tournamentid, guests, lastelo, option, option2, bannedregionplayers=None, argelo=None):
-    # Visitors with an argelo entry contribute their arg26 ELO to avg_elo /
-    # topelos instead of their cba26 default-1500.
-    if bannedregionplayers is None:
-        bannedregionplayers = []
-    if argelo is None:
-        argelo = {}
-    defaultelo = importVars(4)
-
-    def strengthElo(globalid):
-        # Visitor with arg26 entry -> arg26 ELO; otherwise -> lastelo (legacy).
-        if globalid in bannedregionplayers and globalid in argelo:
-            return argelo[globalid]
-        return lastelo.get(globalid, defaultelo)
-
+def updatePlacement(placementdata, tournamentid, guests, lastelo, option, option2):
     # Initial count for number of present attendes and average elo
     nplayers = sumelo = 0
     # Identify ranking type
@@ -102,13 +88,13 @@ def updatePlacement(placementdata, tournamentid, guests, lastelo, option, option
             continue
         nplayers += 1
         presentattendees.append(entrantid)
-        sumelo += strengthElo(Player.entrants[entrantid][0].globalid)
+        sumelo += lastelo[Player.entrants[entrantid][0].globalid]
     nplayers += len(guests) # To count for guests
 
     # Update N players in database for this tournament
     executeQuery("""update tournaments set attendees = ? where id = ?""", (nplayers, tournamentid))
     # AVG elo for region
-    avgelo = (sumelo + defaultelo * len(guests)) / nplayers
+    avgelo = (sumelo + importVars(4) * len(guests)) / nplayers
     # AVG elo for Arg
     placements = {}
     for i in placementdata:
@@ -120,10 +106,10 @@ def updatePlacement(placementdata, tournamentid, guests, lastelo, option, option
     for entrantid, plc in placements.items():
         try:
             player = Player.entrants[entrantid][0]
-            elopre = strengthElo(player.globalid)
+            elopre = lastelo.get(player.globalid, importVars(4))
         except:
             # Guest
-            elopre = defaultelo
+            elopre = importVars(4)
         ranked.append((plc, -elopre, entrantid))
 
     ranked.sort()
@@ -133,9 +119,9 @@ def updatePlacement(placementdata, tournamentid, guests, lastelo, option, option
     for eid in top8entrants:
         try:
             gid = Player.entrants[eid][0].globalid
-            topelos.append(strengthElo(gid))
+            topelos.append(lastelo.get(gid, importVars(4)))
         except:
-            topelos.append(defaultelo)
+            topelos.append(importVars(4))
 
     # Update points per player
     for i in placementdata:
